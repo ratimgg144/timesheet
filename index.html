@@ -4,9 +4,9 @@
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
 	<title>Timesheet Tracker</title>
-<link rel="stylesheet" href="./styles.css" />
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-<script src="./script.js" defer></script>
+	<link rel="stylesheet" href="./styles.css" />
+	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+	<script src="./script.js" defer></script>
 </head>
 <body>
 	<div class="container">
@@ -145,10 +145,52 @@
 			<div id="dailySummary" class="summary-grid"></div>
 		</section>
 
+		<!-- Team Chat -->
+		<section class="card">
+			<h2>Team Chat</h2>
+			<div class="chat-login" id="chatLogin">
+				<div class="form-row">
+					<div class="field">
+						<label for="chatDesigner">I am</label>
+						<select id="chatDesigner">
+							<option value="" selected disabled>Select designer</option>
+							<option value="Rati">Rati</option>
+							<option value="Steven">Steven</option>
+							<option value="Cristian">Cristian</option>
+							<option value="Santiago">Santiago</option>
+							<option value="Andrea">Andrea</option>
+							<option value="Valentina">Valentina</option>
+							<option value="Megui">Megui</option>
+						</select>
+					</div>
+					<div class="field flex-1">
+						<label for="chatPassword">Password</label>
+						<input type="password" id="chatPassword" placeholder="Enter password" />
+					</div>
+					<div class="field">
+						<label>&nbsp;</label>
+						<button id="chatLoginBtn" class="btn">Enter Chat</button>
+					</div>
+				</div>
+				<p class="help">Each designer has a distinct password. Change them in the code if needed.</p>
+			</div>
+
+			<div class="chat-panel" id="chatPanel" hidden>
+				<div class="chat-top">
+					<div id="chatMe" class="help"></div>
+					<button id="chatLogoutBtn" class="btn secondary">Logout</button>
+				</div>
+				<div id="chatMessages" class="chat-messages"></div>
+				<div class="chat-input">
+					<input type="text" id="chatInput" placeholder="Type a message and press Enter..." />
+					<button id="chatSendBtn" class="btn">Send</button>
+				</div>
+			</div>
+		</section>
+
 		<footer class="footer">
-			<small>Timesheet Tracker • Local-only • No backend required</small>
+			<small>Timesheet Tracker • Local-only UI • Data via JSONBin</small>
 		</footer>
 	</div>
 </body>
-
 </html>
