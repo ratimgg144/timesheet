@@ -1,36 +1,47 @@
 (function () {
 	"use strict";
 
-	console.log("Timesheet JS v8 (jsonbin)");
+	console.log("Timesheet JS v10 (jsonbin + chat)");
 
 	// ======= CONFIG =======
 	const DESIGNERS = ["Rati", "Steven", "Cristian", "Santiago", "Andrea", "Valentina", "Megui"];
 
-	// Old local keys kept only for optional offline fallback/migration
+	// Simple client-side passwords (change as needed)
+	const PASSWORDS_PLAIN = {
+		"Rati": "Rati#2025",
+		"Steven": "Steven#2025",
+		"Cristian": "Cristian#2025",
+		"Santiago": "Santiago#2025",
+		"Andrea": "Andrea#2025",
+		"Valentina": "Valentina#2025",
+		"Megui": "Megui#2025"
+	};
+
+	// Old local keys only for optional fallback/migration
 	const STORAGE_KEY = "timesheet_entries_v7_local";
 	const TIMER_KEY = "timesheet_active_timer_v1_local";
 
-	// ======= JSONBIN CONFIG (you provided these) =======
+	// ======= JSONBIN CONFIG =======
 	const JSONBIN_BIN_ID = "68dea90943b1c97be9581d23";
 	const JSONBIN_KEY = "$2a$10$BCr/smrghzHthU4HHCysDuyzqeijFau.xhq.R3rANk1Qdw1pVW2aS";
 	const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 
 	// ======= SAFE DOM HELPERS =======
 	function $(id) { return document.getElementById(id); }
-	function on(id, event, handler) {
-		const el = $(id);
-		if (el) el.addEventListener(event, handler);
-	}
-	function safeValue(id) {
-		const el = $(id);
-		return (el && typeof el.value === "string") ? el.value : "";
-	}
+	function on(id, event, handler) { const el = $(id); if (el) el.addEventListener(event, handler); }
+	function safeValue(id) { const el = $(id); return (el && typeof el.value === "string") ? el.value : ""; }
 	function elExists(id) { return !!$(id); }
 
 	// ======= STATE =======
 	let entries = [];
 	let activeTimer = null;
 	let timerInterval = null;
+
+	// Chat state
+	let chatMessages = []; // { id, designer, text, ts }
+	let chatUser = null;   // string designer name
+	let chatPollTimer = null;
+	let chatLastRenderedId = null;
 
 	// ======= EXTERNAL LIBS =======
 	function ensureSheetJSLoaded() {
@@ -43,9 +54,7 @@
 			document.head.appendChild(s);
 		});
 	}
-	function ensureJsPDFLoaded() {
-		return Promise.resolve(!!window.jspdf || !!window.jspdf?.jsPDF || !!window.jsPDF);
-	}
+	function ensureJsPDFLoaded() { return Promise.resolve(!!window.jspdf || !!window.jspdf?.jsPDF || !!window.jsPDF); }
 
 	// ======= JSONBIN CLIENT =======
 	async function jsonbinGetLatest() {
@@ -53,15 +62,11 @@
 		const res = await fetch(url, {
 			method: "GET",
 			cache: "no-store",
-			headers: {
-				"X-Master-Key": JSONBIN_KEY,
-				"X-Bin-Meta": "false"
-			}
+			headers: { "X-Master-Key": JSONBIN_KEY, "X-Bin-Meta": "false" }
 		});
 		if (!res.ok) throw new Error(`GET failed: ${res.status}`);
-		return await res.json(); // expect { entries: [...], activeTimer: {...}|null }
+		return await res.json();
 	}
-
 	async function jsonbinPut(data) {
 		const url = `${JSONBIN_BASE}/b/${JSONBIN_BIN_ID}`;
 		const res = await fetch(url, {
@@ -76,31 +81,20 @@
 		if (!res.ok) throw new Error(`PUT failed: ${res.status}`);
 		return await res.json();
 	}
-
 	async function withRetry(fn, attempts = 2) {
 		let lastErr;
 		for (let i = 0; i < attempts; i++) {
-			try { return await fn(); }
-			catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 400)); }
+			try { return await fn(); } catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 400)); }
 		}
 		throw lastErr;
 	}
 
-	// ======= LOCAL FALLBACK (optional) =======
+	// ======= LOCAL FALLBACK =======
 	function localLoadEntries() {
-		try {
-			const raw = localStorage.getItem(STORAGE_KEY);
-			if (!raw) return [];
-			const parsed = JSON.parse(raw);
-			if (!Array.isArray(parsed)) return [];
-			return parsed;
-		} catch { return []; }
+		try { const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return []; const p = JSON.parse(raw); return Array.isArray(p) ? p : []; } catch { return []; }
 	}
 	function localLoadActiveTimer() {
-		try {
-			const raw = localStorage.getItem(TIMER_KEY);
-			return raw ? JSON.parse(raw) : null;
-		} catch { return null; }
+		try { const raw = localStorage.getItem(TIMER_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
 	}
 
 	// ======= REMOTE LOAD/SAVE =======
@@ -110,6 +104,7 @@
 			const safe = data && typeof data === "object" ? data : {};
 			const loadedEntries = Array.isArray(safe.entries) ? safe.entries : [];
 			const loadedTimer = safe.activeTimer && typeof safe.activeTimer === "object" ? safe.activeTimer : null;
+			const loadedChat = Array.isArray(safe.chatMessages) ? safe.chatMessages : [];
 
 			entries = loadedEntries.map(x => ({
 				id: String(x.id),
@@ -129,44 +124,30 @@
 				mentions: Array.isArray(loadedTimer.mentions) ? loadedTimer.mentions : [],
 				startMs: Number(loadedTimer.startMs)
 			} : null;
+
+			chatMessages = loadedChat.map(m => ({
+				id: String(m.id),
+				designer: String(m.designer || ""),
+				text: String(m.text || ""),
+				ts: isFinite(m.ts) ? Number(m.ts) : Date.now()
+			})).filter(m => m.designer && m.text);
 		} catch (e) {
-			console.warn("jsonbin load failed, using local fallback:", e);
+			console.warn("jsonbin load failed, using local fallback for timesheets:", e);
 			entries = localLoadEntries();
 			activeTimer = localLoadActiveTimer();
+			chatMessages = []; // no offline fallback for chat
 		}
 	}
 
 	function remoteSaveAllNow() {
-		const payload = { entries, activeTimer };
-		return withRetry(() => jsonbinPut(payload)).catch(err => {
-			console.error("jsonbin save failed:", err);
-		});
+		const payload = { entries, activeTimer, chatMessages };
+		return withRetry(() => jsonbinPut(payload)).catch(err => console.error("jsonbin save failed:", err));
 	}
 
-	// Optional: keep debounced for bulk ops, but call Now at critical moments
 	let saveDebounce;
-function remoteSaveAllDebounced() {
-	clearTimeout(saveDebounce);
-	saveDebounce = setTimeout(remoteSaveAllNow, 400);
-}
-
-	// Optional one-time migration (push local to remote if remote is empty)
-	async function migrateLocalToJsonBinIfEmpty() {
-		try {
-			const data = await jsonbinGetLatest();
-			const isEmpty = !data || !Array.isArray(data.entries) || data.entries.length === 0;
-			if (isEmpty) {
-				const localE = localLoadEntries();
-				const localT = localLoadActiveTimer();
-				if (localE && localE.length) {
-					entries = localE;
-					activeTimer = localT || null;
-					await remoteSaveAllNow();
-				}
-			}
-		} catch (e) {
-			console.warn("Migration skipped:", e);
-		}
+	function remoteSaveAllDebounced() {
+		clearTimeout(saveDebounce);
+		saveDebounce = setTimeout(remoteSaveAllNow, 400);
 	}
 
 	// ======= UTILS =======
@@ -178,29 +159,19 @@ function remoteSaveAllDebounced() {
 		}
 		return String(Date.now()) + Math.random().toString(16).slice(2);
 	}
-	function formatDate(ms) {
-		const d = new Date(ms);
-		return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-	}
-	function formatTime(ms) {
-		const d = new Date(ms);
-		return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-	}
+	function formatDate(ms) { const d = new Date(ms); return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }); }
+	function formatTime(ms) { const d = new Date(ms); return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); }
 	function formatDuration(ms) {
 		if (!isFinite(ms) || ms < 0) return "—";
 		const sec = Math.floor(ms / 1000);
-		const h = Math.floor(sec / 3600);
-		const m = Math.floor((sec % 3600) / 60);
-		const s = sec % 60;
+		const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
 		return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
 	}
 	function getWeekRangeFromInput(weekValue) {
 		if (!weekValue) return null;
 		const [yearStr, weekStr] = weekValue.split("-W");
-		const year = parseInt(yearStr, 10);
-		const week = parseInt(weekStr, 10);
+		const year = parseInt(yearStr, 10), week = parseInt(weekStr, 10);
 		if (!year || !week) return null;
-
 		const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
 		const dow = simple.getUTCDay() || 7;
 		const monday = new Date(simple);
@@ -213,106 +184,46 @@ function remoteSaveAllDebounced() {
 	function eStart(e) { return e.startMs ?? e.endMs ?? 0; }
 	function eEnd(e) { return e.endMs ?? e.startMs ?? 0; }
 
-	function parseMentions(text) {
-		if (!text) return [];
-		const names = new Set();
-		const regex = /@([A-Za-zÀ-ÖØ-öø-ÿ]+)\b/g;
-		let m;
-		while ((m = regex.exec(text)) !== null) {
-			const name = m[1];
-			if (DESIGNERS.includes(name)) names.add(name);
-		}
-		return Array.from(names);
-	}
-
-	// ======= FILTERS =======
+	// ======= FILTERS/RENDER BASIC =======
 	function applyFilters(data) {
 		const designer = safeValue("filterDesigner");
 		const weekValue = safeValue("filterWeek");
-		const q = safeValue("searchInput").trim().toLowerCase();
+		const q = ""; // no search box in your current HTML set
 
 		let filtered = data;
 		if (designer) filtered = filtered.filter(e => e.designer === designer);
 
 		const range = getWeekRangeFromInput(weekValue);
-		if (range) {
-			filtered = filtered.filter(e => {
-				const start = eStart(e);
-				return start >= range.startMs && start <= range.endMs;
-			});
-		}
+		if (range) filtered = filtered.filter(e => { const s = eStart(e); return s >= range.startMs && s <= range.endMs; });
 
-		if (q) {
-			filtered = filtered.filter(e => {
-				const hay = `${e.designer} ${e.task} ${e.comments || ""}`.toLowerCase();
-				return hay.includes(q);
-			});
-		}
+		if (q) filtered = filtered.filter(e => (`${e.designer} ${e.task} ${e.comments || ""}`).toLowerCase().includes(q));
 
 		filtered.sort((a, b) => eStart(b) - eStart(a));
 		return filtered;
 	}
 
-	// ======= RENDER: TABLE =======
 	function renderTable(data) {
 		if (!elExists("entriesTbody") || !elExists("entryCount")) return;
-		const tbody = $("entriesTbody");
-		const countEl = $("entryCount");
+		const tbody = $("entriesTbody"), countEl = $("entryCount");
 		tbody.innerHTML = "";
-
 		for (const e of data) {
-			const tr = document.createElement("tr");
-			tr.setAttribute("data-designer", e.designer);
+			const tr = document.createElement("tr"); tr.setAttribute("data-designer", e.designer);
+			const start = eStart(e), end = eEnd(e), duration = isFinite(end - start) ? end - start : 0;
 
-			const tdDesigner = document.createElement("td");
-			tdDesigner.textContent = e.designer;
-
-			const start = eStart(e);
-			const end = eEnd(e);
-			const duration = isFinite(end - start) ? end - start : 0;
-
-			const tdDate = document.createElement("td");
-			tdDate.textContent = formatDate(start || end);
-
-			const tdStart = document.createElement("td");
-			tdStart.textContent = start ? formatTime(start) : "—";
-
-			const tdEnd = document.createElement("td");
-			tdEnd.textContent = end ? formatTime(end) : "—";
-
-			const tdDuration = document.createElement("td");
-			tdDuration.textContent = formatDuration(duration);
-
-			const tdTask = document.createElement("td");
-			tdTask.textContent = e.task;
-
-			const tdComments = document.createElement("td");
-			tdComments.textContent = e.comments || "";
-
-			const tdActions = document.createElement("td");
-			const wrap = document.createElement("div");
-			wrap.className = "action-btns";
-
-			const editBtn = document.createElement("button");
-			editBtn.className = "action-mini secondary";
-			editBtn.textContent = "Edit";
-			editBtn.addEventListener("click", () => loadIntoForm(e.id));
-
-			const delBtn = document.createElement("button");
-			delBtn.className = "action-mini danger";
-			delBtn.textContent = "Delete";
-			delBtn.addEventListener("click", () => deleteEntry(e.id));
-
-			wrap.append(editBtn, delBtn);
-			tdActions.appendChild(wrap);
-
-			tr.append(tdDesigner, tdDate, tdStart, tdEnd, tdDuration, tdTask, tdComments, tdActions);
+			const c = (t)=>{ const td=document.createElement("td"); td.textContent=t; return td; };
+			tr.append(
+				c(e.designer),
+				c(formatDate(start || end)),
+				c(start ? formatTime(start) : "—"),
+				c(end ? formatTime(end) : "—"),
+				c(formatDuration(duration)),
+				c(e.task)
+			);
 			tbody.appendChild(tr);
 		}
 		countEl.textContent = String(data.length);
 	}
 
-	// ======= RENDER: CARDS =======
 	function colorForDesigner(name) {
 		const css = getComputedStyle(document.documentElement);
 		const map = {
@@ -328,41 +239,19 @@ function remoteSaveAllDebounced() {
 	}
 	function renderCards(data) {
 		if (!elExists("cardsContainer")) return;
-		const container = $("cardsContainer");
-		container.innerHTML = "";
-
+		const container = $("cardsContainer"); container.innerHTML = "";
 		for (const e of data) {
-			const start = eStart(e);
-			const end = eEnd(e);
-			const duration = isFinite(end - start) ? end - start : 0;
+			const start = eStart(e), end = eEnd(e), duration = isFinite(end - start) ? end - start : 0;
+			const card = document.createElement("div"); card.className = "card-item";
+			const col = colorForDesigner(e.designer); if (col) card.style.borderLeft = `4px solid ${col}`;
 
-			const card = document.createElement("div");
-			card.className = "card-item";
-			const col = colorForDesigner(e.designer);
-			if (col) card.style.borderLeft = `4px solid ${col}`;
-
-			const title = document.createElement("div");
-			title.style.fontWeight = "700";
-			title.textContent = e.task;
-
-			const meta = document.createElement("div");
-			meta.className = "meta";
-			meta.innerHTML = `<span>${e.designer}</span><span>${formatDate(start || end)}</span>`;
-
-			const times = document.createElement("div");
-			times.className = "meta";
-			times.innerHTML = `<span>${start ? formatTime(start) : "—"} → ${end ? formatTime(end) : "—"}</span><span>${formatDuration(duration)}</span>`;
-
-			const comments = document.createElement("div");
-			comments.className = "meta";
-			comments.textContent = e.comments || "";
-
-			card.append(title, meta, times, comments);
+			const title = document.createElement("div"); title.style.fontWeight = "700"; title.textContent = e.task;
+			const meta = document.createElement("div"); meta.className = "meta"; meta.innerHTML = `<span>${e.designer}</span><span>${formatDate(start || end)}</span>`;
+			const times = document.createElement("div"); times.className = "meta"; times.innerHTML = `<span>${start ? formatTime(start) : "—"} → ${end ? formatTime(end) : "—"}</span><span>${formatDuration(duration)}</span>`;
+			card.append(title, meta, times);
 			container.appendChild(card);
 		}
 	}
-
-	// ======= RENDER: SUMMARY =======
 	function renderSummary(data) {
 		if (!elExists("dailySummary")) return;
 		const byDate = new Map();
@@ -374,25 +263,16 @@ function remoteSaveAllDebounced() {
 			const dur = Math.max(0, (eEnd(e) || 0) - (eStart(e) || 0));
 			map.set(e.designer, { tasks: prev.tasks + 1, duration: prev.duration + dur });
 		}
-
-		const container = $("dailySummary");
-		container.innerHTML = "";
-
+		const container = $("dailySummary"); container.innerHTML = "";
 		const datesSorted = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
 		for (const day of datesSorted) {
-			const card = document.createElement("div");
-			card.className = "summary-card";
-
-			const h4 = document.createElement("h4");
-			const d = new Date(day + "T00:00:00");
+			const card = document.createElement("div"); card.className = "summary-card";
+			const h4 = document.createElement("h4"); const d = new Date(day + "T00:00:00");
 			h4.textContent = d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 			card.appendChild(h4);
-
-			const map = byDate.get(day);
-			const designersSorted = DESIGNERS.filter(n => map.has(n));
+			const map = byDate.get(day); const designersSorted = DESIGNERS.filter(n => map.has(n));
 			for (const name of designersSorted) {
-				const row = document.createElement("div");
-				row.className = "summary-row";
+				const row = document.createElement("div"); row.className = "summary-row";
 				const v = map.get(name);
 				row.innerHTML = `<span style="border-left:4px solid ${colorForDesigner(name)}; padding-left:8px">${name}</span><span>${v.tasks} tasks • ${formatDuration(v.duration)}</span>`;
 				card.appendChild(row);
@@ -400,30 +280,16 @@ function remoteSaveAllDebounced() {
 			container.appendChild(card);
 		}
 	}
-
-	// ======= RENDER: FEED =======
 	function renderFeed(allData) {
-		if (!elExists("teamFeed")) return;
-		const feed = $("teamFeed");
-		feed.innerHTML = "";
-		const sorted = [...allData].sort((a, b) => eStart(b) - eStart(a)).slice(0, 50);
-		for (const e of sorted) {
-			const item = document.createElement("div");
-			item.className = "feed-item";
-			const when = formatDate(eStart(e) || eEnd(e)) + " " + (eStart(e) ? formatTime(eStart(e)) : "");
-			const mentions = e.mentions && e.mentions.length ? ` • Mentions: ${e.mentions.join(", ")}` : "";
-			item.innerHTML = `<div><strong>${e.designer}</strong> — ${e.task}</div><div class="small">${when}${mentions}</div><div class="small">${e.comments || ""}</div>`;
-			feed.appendChild(item);
-		}
+		// optional in your current layout; safe no-op
 	}
 
-	// ======= MASTER RENDER =======
 	function triggerRender() {
 		const filtered = applyFilters(entries);
 		renderTable(filtered);
 		renderCards(filtered);
 		renderSummary(filtered);
-		renderFeed(entries);
+		renderChat();
 	}
 
 	// ======= FORM HANDLERS =======
@@ -431,48 +297,20 @@ function remoteSaveAllDebounced() {
 		if (!dateStr || !timeStr) return null;
 		const [y, m, d] = dateStr.split("-").map(n => parseInt(n, 10));
 		const [hh, mm] = timeStr.split(":").map(n => parseInt(n, 10));
-		const dt = new Date();
-		dt.setFullYear(y, m - 1, d);
-		dt.setHours(hh, mm, 0, 0);
-		return dt.getTime();
+		const dt = new Date(); dt.setFullYear(y, m - 1, d); dt.setHours(hh, mm, 0, 0); return dt.getTime();
 	}
 	function resetForm() {
 		if (!elExists("entryForm")) return;
-		if (elExists("entryId")) $("entryId").value = "";
-		if (elExists("designer")) $("designer").value = "";
-		if (elExists("task")) $("task").value = "";
-		if (elExists("manualDate")) $("manualDate").value = "";
-		if (elExists("startTime")) $("startTime").value = "";
-		if (elExists("endTime")) $("endTime").value = "";
-		if (elExists("comments")) $("comments").value = "";
-	}
-	function loadIntoForm(id) {
-		if (!elExists("entryForm")) return;
-		const e = entries.find(x => x.id === id);
-		if (!e) return;
-		if (elExists("entryId")) $("entryId").value = e.id;
-		if (elExists("designer")) $("designer").value = e.designer;
-		if (elExists("task")) $("task").value = e.task;
-		const dt = new Date(eStart(e));
-		if (elExists("manualDate")) $("manualDate").value = dt.toISOString().slice(0, 10);
-		if (elExists("startTime")) $("startTime").value = e.startMs ? new Date(e.startMs).toISOString().slice(11,16) : "";
-		if (elExists("endTime")) $("endTime").value = e.endMs ? new Date(e.endMs).toISOString().slice(11,16) : "";
-		if (elExists("comments")) $("comments").value = e.comments || "";
-		window.scrollTo({ top: 0, behavior: "smooth" });
-	}
-	function deleteEntry(id) {
-		if (!confirm("Delete this entry?")) return;
-		entries = entries.filter(e => e.id !== id);
-		remoteSaveAllNow();
-		triggerRender();
+		$("designer").value = "";
+		$("task").value = "";
+		$("manualDate").value = "";
+		$("startTime").value = "";
+		$("endTime").value = "";
 	}
 	function onSubmit(ev) {
 		ev.preventDefault();
-		const id = elExists("entryId") && $("entryId").value ? $("entryId").value : cryptoRandomId();
 		const designer = safeValue("designer");
 		const task = safeValue("task").trim();
-		const comments = safeValue("comments").trim();
-		const mentions = parseMentions(comments);
 		const dateStr = safeValue("manualDate");
 		const startStr = safeValue("startTime");
 		const endStr = safeValue("endTime");
@@ -481,16 +319,12 @@ function remoteSaveAllDebounced() {
 		let startMs = null, endMs = null;
 		if (dateStr && startStr) startMs = parseManualDateTime(dateStr, startStr);
 		if (dateStr && endStr) endMs = parseManualDateTime(dateStr, endStr);
-
 		if (!startMs && !endMs) { const now = Date.now(); startMs = now; endMs = now; }
 		else if (startMs && !endMs) endMs = startMs;
 		else if (!startMs && endMs) startMs = endMs;
 		if (endMs < startMs) { const t = startMs; startMs = endMs; endMs = t; }
 
-		const idx = entries.findIndex(e => e.id === id);
-		const payload = { id, designer, task, comments, mentions, startMs, endMs };
-		if (idx >= 0) entries[idx] = payload; else entries.push(payload);
-
+		entries.push({ id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs, endMs });
 		remoteSaveAllNow();
 		resetForm();
 		triggerRender();
@@ -518,32 +352,96 @@ function remoteSaveAllDebounced() {
 		updateTimerButtons();
 		triggerRender();
 	}
-	function runTimerTick() {
-		if (!activeTimer || !elExists("timerStatus")) return;
-		const elapsed = Date.now() - activeTimer.startMs;
-		$("timerStatus").textContent = formatDuration(elapsed);
-	}
+	function runTimerTick() { if (!activeTimer || !elExists("timerStatus")) return; $("timerStatus").textContent = formatDuration(Date.now() - activeTimer.startMs); }
 	function updateTimerButtons() {
 		if (!elExists("startTimer") || !elExists("stopTimer")) return;
-		const startBtn = $("startTimer");
-		const stopBtn = $("stopTimer");
-		if (activeTimer) { startBtn.disabled = true; stopBtn.disabled = false; }
-		else { startBtn.disabled = false; stopBtn.disabled = true; }
+		$("startTimer").disabled = !!activeTimer;
+		$("stopTimer").disabled = !activeTimer;
+	}
+
+	// ======= CHAT =======
+	function renderChat() {
+		if (!elExists("chatLogin") || !elExists("chatPanel")) return;
+		if (chatUser) {
+			$("chatLogin").hidden = true;
+			$("chatPanel").hidden = false;
+			$("chatMe").textContent = `You are logged in as ${chatUser}`;
+		} else {
+			$("chatLogin").hidden = false;
+			$("chatPanel").hidden = true;
+		}
+		if (chatUser) renderChatMessages();
+	}
+	function renderChatMessages() {
+		const box = $("chatMessages");
+		box.innerHTML = "";
+		for (const m of chatMessages.sort((a,b)=>a.ts-b.ts)) {
+			const wrap = document.createElement("div");
+			const meta = document.createElement("div"); meta.className = "chat-meta";
+			meta.textContent = `${m.designer} • ${new Date(m.ts).toLocaleTimeString()}`;
+			const msg = document.createElement("div"); msg.className = "chat-msg"; if (chatUser === m.designer) msg.classList.add("me");
+			msg.textContent = m.text;
+			const item = document.createElement("div");
+			item.append(meta, msg);
+			box.appendChild(item);
+			chatLastRenderedId = m.id;
+		}
+		box.scrollTop = box.scrollHeight;
+	}
+	function chatLogin() {
+		const who = safeValue("chatDesigner");
+		const pw = safeValue("chatPassword");
+		if (!who || !pw) { alert("Select your name and enter password."); return; }
+		const expected = PASSWORDS_PLAIN[who];
+		if (!expected || pw !== expected) { alert("Incorrect password."); return; }
+		chatUser = who;
+		$("chatPassword").value = "";
+		renderChat();
+		if (!chatPollTimer) chatPollTimer = setInterval(refreshChatFromRemote, 4000);
+	}
+	function chatLogout() {
+		chatUser = null;
+		renderChat();
+	}
+	function chatSend() {
+		if (!chatUser) { alert("Please login to chat."); return; }
+		const text = safeValue("chatInput").trim();
+		if (!text) return;
+		const msg = { id: cryptoRandomId(), designer: chatUser, text, ts: Date.now() };
+		chatMessages.push(msg);
+		$("chatInput").value = "";
+		renderChatMessages();
+		remoteSaveAllDebounced();
+	}
+	async function refreshChatFromRemote() {
+		try {
+			const data = await withRetry(() => jsonbinGetLatest());
+			const loadedChat = Array.isArray(data.chatMessages) ? data.chatMessages : [];
+			// Only update if there are new messages
+			if (loadedChat.length !== chatMessages.length) {
+				chatMessages = loadedChat.map(m => ({
+					id: String(m.id),
+					designer: String(m.designer || ""),
+					text: String(m.text || ""),
+					ts: isFinite(m.ts) ? Number(m.ts) : Date.now()
+				})).filter(m => m.designer && m.text);
+				renderChatMessages();
+			}
+		} catch (e) {
+			console.warn("Chat poll failed:", e);
+		}
 	}
 
 	// ======= EXPORT =======
 	function downloadBlob(blob, filename) {
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement("a");
-		a.href = url;
-		a.download = filename;
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
+		a.href = url; a.download = filename;
+		document.body.appendChild(a); a.click(); a.remove();
 		URL.revokeObjectURL(url);
 	}
 	function exportCSV(rows, filename) {
-		const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
+		const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"" });
 		const csv = [
 			headers.join(","),
 			...rows.map(r => headers.map(k => {
@@ -554,140 +452,52 @@ function remoteSaveAllDebounced() {
 		].join("\n");
 		downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
 	}
-	async function copyCSVToClipboard(rows) {
-		try {
-			const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
-			const csv = [
-				headers.join(","),
-				...rows.map(r => headers.map(k => {
-					const val = r[k] ?? "";
-					const needQuote = /[",\n]/.test(String(val));
-					return needQuote ? `"${String(val).replace(/"/g, '""')}"` : String(val);
-				}).join(","))
-			].join("\n");
-			await navigator.clipboard.writeText(csv);
-			alert("Copied CSV to clipboard.");
-		} catch {
-			alert("Clipboard copy failed. Your browser may block clipboard access.");
-		}
-	}
 	function getExportRange() {
-		const s = safeValue("exportStart");
-		const e = safeValue("exportEnd");
-		if (!s && !e) return null;
-		const startMs = s ? new Date(s + "T00:00:00").getTime() : 0;
-		const endMs = e ? new Date(e + "T23:59:59").getTime() : Number.MAX_SAFE_INTEGER;
-		return { startMs, endMs };
+		// Your current HTML doesn't include export range inputs; keep simple
+		return null;
 	}
 	function getFilteredForExport() {
 		const base = applyFilters(entries);
 		const range = getExportRange();
 		if (!range) return base;
-		return base.filter(e => {
-			const t = eStart(e);
-			return t >= range.startMs && t <= range.endMs;
-		});
+		return base.filter(e => { const t = eStart(e); return t >= range.startMs && t <= range.endMs; });
 	}
 	async function toExcel() {
 		const data = getFilteredForExport();
 		if (data.length === 0) { alert("No data to export."); return; }
 		const rows = data.map(e => {
-		 const start = eStart(e), end = eEnd(e);
-		 return {
+			const start = eStart(e), end = eEnd(e);
+			return {
 				Designer: e.designer,
 				Date: new Date(start || end).toISOString().slice(0, 10),
 				Start: start ? new Date(start).toLocaleTimeString() : "",
 				End: end ? new Date(end).toLocaleTimeString() : "",
 				Duration: formatDuration((end || 0) - (start || 0)),
-				Task: e.task,
-				Comments: e.comments || ""
+				Task: e.task
 			};
 		});
-
 		const ok = await ensureSheetJSLoaded();
 		if (ok && window.XLSX) {
 			try {
 				const ws = XLSX.utils.json_to_sheet(rows);
-				ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 50 }, { wch: 50 }];
+				ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 50 }];
 				const wb = XLSX.utils.book_new();
 				XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
 				const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
 				downloadBlob(new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), "timesheet.xlsx");
 				return;
-			} catch (err) {
-				console.error("XLSX export failed:", err);
-			}
+			} catch (err) { console.error("XLSX export failed:", err); }
 		}
 		exportCSV(rows, "timesheet.csv");
 	}
-	async function toPdf() {
-		const data = getFilteredForExport();
-		if (data.length === 0) { alert("No data to export."); return; }
-		const ok = await ensureJsPDFLoaded();
-		if (!ok || !window.jspdf) { alert("PDF export unavailable."); return; }
-		const { jsPDF } = window.jspdf;
-		const doc = new jsPDF({ unit: "pt", format: "a4" });
-		const margin = 40;
-		let y = margin;
-		doc.setFont("helvetica", "bold"); doc.setFontSize(14);
-		doc.text("Timesheet Export", margin, y); y += 20;
-		doc.setFont("helvetica", "normal"); doc.setFontSize(10);
 
-		const headers = ["Designer", "Date", "Start", "End", "Duration", "Task"];
-		doc.text(headers.join("  |  "), margin, y); y += 14;
-		for (const e of data) {
-			const start = eStart(e), end = eEnd(e);
-			const row = [
-				e.designer,
-				new Date(start || end).toISOString().slice(0,10),
-				start ? new Date(start).toLocaleTimeString() : "",
-				end ? new Date(end).toLocaleTimeString() : "",
-				formatDuration((end||0)-(start||0)),
-				e.task
-			].join("  |  ");
-			doc.text(row, margin, y, { maxWidth: 515 });
-			y += 14;
-			if (y > 780) { doc.addPage(); y = margin; }
-		}
-		doc.save("timesheet.pdf");
-	}
-
-	// ======= SMART RANGES =======
-	function getSmartRange(kind) {
-		const now = new Date();
-		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-		if (kind === "today") {
-			const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
-			return { startMs: start, endMs: end };
-		}
-		if (kind === "week") {
-			const day = now.getDay() || 7; // Mon=1..Sun=7
-			const monday = new Date(now);
-			monday.setDate(now.getDate() - day + 1);
-			monday.setHours(0,0,0,0);
-			return { startMs: monday.getTime(), endMs: end };
-		}
-		if (kind === "last30") {
-			const start = new Date(now);
-			start.setDate(now.getDate() - 29);
-			start.setHours(0,0,0,0);
-			return { startMs: start.getTime(), endMs: end };
-		}
-		return null;
-	}
-
-	// ======= UI EVENTS (SAFE) =======
+	// ======= UI EVENTS =======
 	function initEvents() {
-		// Form
 		on("entryForm", "submit", onSubmit);
-		on("resetForm", "click", resetForm);
 
-		// Filters
 		on("filterDesigner", "change", triggerRender);
 		on("filterWeek", "change", triggerRender);
-		on("searchInput", "input", triggerRender);
 
-		// View toggle
 		on("toggleView", "click", () => {
 			const btn = $("toggleView");
 			const isTable = btn && btn.getAttribute("data-view") === "table";
@@ -701,51 +511,19 @@ function remoteSaveAllDebounced() {
 				if (btn) { btn.textContent = "Cards View"; btn.setAttribute("data-view", "table"); }
 			}
 		});
-
-		// Clear filters
 		on("clearFilters", "click", () => {
 			if (elExists("filterDesigner")) $("filterDesigner").value = "";
 			if (elExists("filterWeek")) $("filterWeek").value = "";
-			if (elExists("searchInput")) $("searchInput").value = "";
-			if (elExists("exportStart")) $("exportStart").value = "";
-			if (elExists("exportEnd")) $("exportEnd").value = "";
 			triggerRender();
 		});
-
-		// Exports
 		on("downloadExcel", "click", toExcel);
-		on("downloadPdf", "click", toPdf);
-		on("copyCsv", "click", () => {
-			const data = getFilteredForExport();
-			if (data.length === 0) { alert("No data to copy."); return; }
-			const rows = data.map(e => {
-				const start = eStart(e), end = eEnd(e);
-			 return {
-					Designer: e.designer,
-					Date: new Date(start || end).toISOString().slice(0, 10),
-					Start: start ? new Date(start).toLocaleTimeString() : "",
-					End: end ? new Date(end).toLocaleTimeString() : "",
-					Duration: formatDuration((end || 0) - (start || 0)),
-					Task: e.task,
-					Comments: e.comments || ""
-				};
-			});
-			copyCSVToClipboard(rows);
-		});
 
-		// Smart quick ranges (if present)
-		document.querySelectorAll(".smart").forEach(btn => {
-			btn.addEventListener("click", () => {
-				const kind = btn.getAttribute("data-range");
-				const r = getSmartRange(kind);
-				if (!r) return;
-				if (elExists("filterWeek")) $("filterWeek").value = "";
-				if (elExists("searchInput")) $("searchInput").value = "";
-				if (elExists("exportStart")) $("exportStart").value = new Date(r.startMs).toISOString().slice(0,10);
-				if (elExists("exportEnd")) $("exportEnd").value = new Date(r.endMs).toISOString().slice(0,10);
-				triggerRender();
-			});
-		});
+		// Chat
+		on("chatLoginBtn", "click", chatLogin);
+		on("chatLogoutBtn", "click", chatLogout);
+		on("chatSendBtn", "click", chatSend);
+		const input = $("chatInput");
+		if (input) input.addEventListener("keydown", (e) => { if (e.key === "Enter") chatSend(); });
 
 		// Timer
 		on("startTimer", "click", startTimer);
@@ -755,14 +533,11 @@ function remoteSaveAllDebounced() {
 	// ======= INIT =======
 	async function init() {
 		await remoteLoadAll();
-		await migrateLocalToJsonBinIfEmpty(); // optional
 		initEvents();
 		updateTimerButtons();
-		if (activeTimer) {
-			runTimerTick();
-			timerInterval = setInterval(runTimerTick, 1000);
-		}
+		if (activeTimer) { runTimerTick(); timerInterval = setInterval(runTimerTick, 1000); }
 		triggerRender();
+		// start chat polling if someone logs in later; otherwise polling begins on login
 	}
 
 	if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
