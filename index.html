@@ -14,62 +14,146 @@
 			<div class="brand">
 				<img id="brandLogo" src="https://i.ibb.co/tw9nL9M1/Group-1171275608.png" alt="Target Test Prep" />
 				<div class="brand-txt">
-					<strong>Timesheet Tracker</strong>
-					<span>Team Productivity Dashboard</span>
+					<strong>Timesheet</strong>
+					<span>Design Team</span>
 				</div>
-			</div>
-			<div class="topbar-actions">
-				<button id="chatToggle" class="btn btn-secondary">
-					💬 Chat <span id="unreadCount" class="unread-badge" style="display: none;">0</span>
-				</button>
-				<button id="exportExcel" class="btn btn-primary">📊 Export Excel</button>
 			</div>
 		</header>
 
-		<!-- Chat Modal -->
-		<div id="chatModal" class="modal">
-			<div class="modal-content chat-modal">
-				<div class="chat-header">
-					<h3>Team Chat</h3>
-					<div class="online-indicators">
-						<span id="onlineCount">0 online</span>
-						<div id="onlineList" class="online-list"></div>
-					</div>
-					<button id="closeChat" class="close-btn">&times;</button>
+		<section class="toolbar card">
+			<div class="filters">
+				<div class="filter">
+					<label for="filterDesigner">Designer</label>
+					<select id="filterDesigner">
+						<option value="">All Designers</option>
+						<option value="Rati" data-color="rati">Rati</option>
+						<option value="Steven" data-color="steven">Steven</option>
+						<option value="Cristian" data-color="cristian">Cristian</option>
+						<option value="Santiago" data-color="santiago">Santiago</option>
+						<option value="Andrea" data-color="andrea">Andrea</option>
+						<option value="Valentina" data-color="valentina">Valentina</option>
+						<option value="Megui" data-color="megui">Megui</option>
+					</select>
 				</div>
-				
-				<div class="chat-messages" id="chatMessages">
-					<!-- Messages will be populated here -->
+				<div class="filter">
+					<label for="filterWeek">Week</label>
+					<input type="week" id="filterWeek" />
 				</div>
-				
-				<div class="typing-indicator" id="typingIndicator" style="display: none;">
-					<span id="typingText"></span>
-				</div>
-				
-				<div class="chat-input-area">
-					<div class="reply-preview" id="replyPreview" style="display: none;">
-						<div class="reply-content">
-							<span class="reply-author"></span>
-							<span class="reply-text"></span>
-						</div>
-						<button id="cancelReply" class="cancel-reply">&times;</button>
-					</div>
-					<div class="chat-input-wrapper">
-						<input type="text" id="chatInput" placeholder="Type a message... (use @name to mention)" />
-						<button id="sendMessage" class="btn btn-primary">Send</button>
-					</div>
+				<div class="actions">
+					<button id="toggleView" class="btn secondary" data-view="table" title="Switch to cards">Cards View</button>
+					<button id="clearFilters" class="btn secondary">Clear</button>
+					<button id="downloadExcel" class="btn">Download as Excel</button>
 				</div>
 			</div>
-		</div>
+		</section>
 
-		<main class="main-content">
-			<!-- Filters Section -->
-			<section class="card">
-				<div class="filters">
-					<div class="filter">
-						<label for="filterDesigner">Designer</label>
-						<select id="filterDesigner">
-							<option value="">All Designers</option>
+		<section class="card">
+			<h2>Add Time Entry</h2>
+			<form id="entryForm">
+				<div class="form-row">
+					<div class="field">
+						<label for="designer">Designer</label>
+						<select id="designer" required>
+							<option value="" disabled selected>Select designer</option>
+							<option value="Rati" data-color="rati">Rati</option>
+							<option value="Steven" data-color="steven">Steven</option>
+							<option value="Cristian" data-color="cristian">Cristian</option>
+							<option value="Santiago" data-color="santiago">Santiago</option>
+							<option value="Andrea" data-color="andrea">Andrea</option>
+							<option value="Valentina" data-color="valentina">Valentina</option>
+							<option value="Megui" data-color="megui">Megui</option>
+						</select>
+					</div>
+					<div class="field flex-1">
+						<label for="task">Task</label>
+						<input type="text" id="task" placeholder="Describe the task..." maxlength="200" required />
+					</div>
+				</div>
+
+				<div class="form-row">
+					<div class="field">
+						<label for="manualDate">Date</label>
+						<input type="date" id="manualDate" />
+					</div>
+					<div class="field">
+						<label for="startTime">Start Time</label>
+						<input type="time" id="startTime" step="60" />
+					</div>
+					<div class="field">
+						<label for="endTime">End Time</label>
+						<input type="time" id="endTime" step="60" />
+					</div>
+					<div class="field">
+						<label>&nbsp;</label>
+						<button type="submit" class="btn">Save Entry</button>
+					</div>
+				</div>
+				<p class="help">Leave times empty to auto-capture current timestamp.</p>
+			</form>
+		</section>
+
+		<section class="card">
+			<div class="timer">
+				<div class="timer-controls">
+					<select id="timerDesigner">
+						<option value="" disabled selected>Designer for Timer</option>
+						<option value="Rati">Rati</option>
+						<option value="Steven">Steven</option>
+						<option value="Cristian">Cristian</option>
+						<option value="Santiago">Santiago</option>
+						<option value="Andrea">Andrea</option>
+						<option value="Valentina">Valentina</option>
+						<option value="Megui">Megui</option>
+					</select>
+					<input type="text" id="timerTask" placeholder="Task name for timer..." />
+					<button id="startTimer" class="btn">Start Task</button>
+					<button id="stopTimer" class="btn secondary" disabled>Stop Task</button>
+					<div class="timer-status" id="timerStatus">00:00:00</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="card">
+			<div class="table-header">
+				<h2>Time Entries</h2>
+				<div class="count"><span id="entryCount">0</span> entries</div>
+			</div>
+
+			<div id="tableView" class="table-wrapper">
+				<table id="entriesTable">
+					<thead>
+						<tr>
+							<th>Designer</th>
+							<th>Date</th>
+							<th>Start</th>
+							<th>End</th>
+							<th>Duration</th>
+							<th>Task</th>
+						</tr>
+					</thead>
+					<tbody id="entriesTbody"></tbody>
+				</table>
+			</div>
+
+			<div id="cardsView" class="cards-wrapper" hidden>
+				<div id="cardsContainer" class="cards"></div>
+			</div>
+		</section>
+
+		<section class="card">
+			<h2>Daily Summary</h2>
+			<div id="dailySummary" class="summary-grid"></div>
+		</section>
+
+		<!-- Team Chat -->
+		<section class="card">
+			<h2>Team Chat</h2>
+			<div class="chat-login" id="chatLogin">
+				<div class="form-row">
+					<div class="field">
+						<label for="chatDesigner">I am</label>
+						<select id="chatDesigner">
+							<option value="" selected disabled>Select designer</option>
 							<option value="Rati">Rati</option>
 							<option value="Steven">Steven</option>
 							<option value="Cristian">Cristian</option>
@@ -79,177 +163,34 @@
 							<option value="Megui">Megui</option>
 						</select>
 					</div>
-					<div class="filter">
-						<label for="filterWeek">Week</label>
-						<select id="filterWeek">
-							<option value="">All Weeks</option>
-						</select>
+					<div class="field flex-1">
+						<label for="chatPassword">Password</label>
+						<input type="password" id="chatPassword" placeholder="Enter password" />
 					</div>
-					<div class="filter">
-						<label for="smartFilter">Quick Filters</label>
-						<select id="smartFilter">
-							<option value="">All Time</option>
-							<option value="today">Today</option>
-							<option value="week">This Week</option>
-							<option value="month">Last 30 Days</option>
-						</select>
-					</div>
-					<div class="filter">
-						<label for="searchInput">Search</label>
-						<input type="text" id="searchInput" placeholder="Search tasks, designers, comments..." />
+					<div class="field">
+						<label>&nbsp;</label>
+						<button id="chatLoginBtn" class="btn">Enter Chat</button>
 					</div>
 				</div>
-			</section>
-
-			<!-- Add Task Form -->
-			<section class="card">
-				<h2>Add New Task</h2>
-				<form id="taskForm">
-					<div class="form-row">
-						<div class="form-group">
-							<label for="designerSelect">Designer</label>
-							<select id="designerSelect" required>
-								<option value="">Select Designer</option>
-								<option value="Rati">Rati</option>
-								<option value="Steven">Steven</option>
-								<option value="Cristian">Cristian</option>
-								<option value="Santiago">Santiago</option>
-								<option value="Andrea">Andrea</option>
-								<option value="Valentina">Valentina</option>
-								<option value="Megui">Megui</option>
-							</select>
-						</div>
-						<div class="form-group">
-							<label for="taskDescription">Task Description</label>
-							<input type="text" id="taskDescription" placeholder="What did you work on?" required />
-						</div>
-					</div>
-					
-					<div class="form-row">
-						<div class="form-group">
-							<label for="startTime">Start Time</label>
-							<input type="time" id="startTime" />
-						</div>
-						<div class="form-group">
-							<label for="endTime">End Time</label>
-							<input type="time" id="endTime" />
-						</div>
-						<div class="form-group">
-							<label for="taskComments">Comments/Mentions</label>
-							<input type="text" id="taskComments" placeholder="Add comments or @mention someone" />
-						</div>
-					</div>
-
-					<div class="timer-section">
-						<div class="timer-display">
-							<span id="timerDisplay">00:00:00</span>
-							<button type="button" id="startTimer" class="btn btn-success">Start Task</button>
-							<button type="button" id="stopTimer" class="btn btn-danger" style="display: none;">Stop Task</button>
-							<button type="button" id="resetTimer" class="btn btn-secondary">Reset</button>
-						</div>
-					</div>
-
-					<button type="submit" class="btn btn-primary">Save Task</button>
-				</form>
-			</section>
-
-			<!-- Daily Summary -->
-			<section class="card">
-				<h2>Today's Summary</h2>
-				<div id="dailySummary" class="summary-grid">
-					<!-- Summary will be populated here -->
-				</div>
-			</section>
-
-			<!-- Export Controls -->
-			<section class="card">
-				<h2>Export Data</h2>
-				<div class="export-controls">
-					<div class="export-row">
-						<div class="form-group">
-							<label for="exportStart">Start Date</label>
-							<input type="date" id="exportStart" />
-						</div>
-						<div class="form-group">
-							<label for="exportEnd">End Date</label>
-							<input type="date" id="exportEnd" />
-						</div>
-						<button id="exportCustomRange" class="btn btn-secondary">Export Custom Range</button>
-						<button id="copyCsv" class="btn btn-secondary">📋 Copy CSV</button>
-					</div>
-				</div>
-			</section>
-
-			<!-- Team Feed -->
-			<section class="card">
-				<h2>Recent Activity</h2>
-				<div id="teamFeed" class="team-feed">
-					<!-- Activity will be populated here -->
-				</div>
-			</section>
-
-			<!-- View Toggle -->
-			<div class="view-toggle">
-				<button id="tableViewBtn" class="btn btn-secondary active">📊 Table View</button>
-				<button id="cardsViewBtn" class="btn btn-secondary">🎴 Cards View</button>
+				<p class="help">Each designer has a distinct password. Change them in the code if needed.</p>
 			</div>
 
-			<!-- Entries Display -->
-			<div id="entriesContainer">
-				<!-- Table View -->
-				<div id="tableView" class="table-container">
-					<table id="entriesTable">
-						<thead>
-							<tr>
-								<th>Designer</th>
-								<th>Date</th>
-								<th>Start Time</th>
-								<th>End Time</th>
-								<th>Duration</th>
-								<th>Task</th>
-								<th>Comments</th>
-								<th>Actions</th>
-							</tr>
-						</thead>
-						<tbody id="entriesTableBody">
-							<!-- Entries will be populated here -->
-						</tbody>
-					</table>
+			<div class="chat-panel" id="chatPanel" hidden>
+				<div class="chat-top">
+					<div id="chatMe" class="help"></div>
+					<button id="chatLogoutBtn" class="btn secondary">Logout</button>
 				</div>
-
-				<!-- Cards View -->
-				<div id="cardsView" class="cards-container" style="display: none;">
-					<!-- Cards will be populated here -->
+				<div id="chatMessages" class="chat-messages"></div>
+				<div class="chat-input">
+					<input type="text" id="chatInput" placeholder="Type a message and press Enter..." />
+					<button id="chatSendBtn" class="btn">Send</button>
 				</div>
 			</div>
-		</main>
-	</div>
+		</section>
 
-	<!-- Login Modal -->
-	<div id="loginModal" class="modal">
-		<div class="modal-content">
-			<h2>Login to Chat</h2>
-			<form id="loginForm">
-				<div class="form-group">
-					<label for="loginDesigner">Select Your Name</label>
-					<select id="loginDesigner" required>
-						<option value="">Choose your name</option>
-						<option value="Rati">Rati</option>
-						<option value="Steven">Steven</option>
-						<option value="Cristian">Cristian</option>
-						<option value="Santiago">Santiago</option>
-						<option value="Andrea">Andrea</option>
-						<option value="Valentina">Valentina</option>
-						<option value="Megui">Megui</option>
-					</select>
-				</div>
-				<div class="form-group">
-					<label for="loginPassword">Password</label>
-					<input type="password" id="loginPassword" placeholder="Enter your password" required />
-				</div>
-				<button type="submit" class="btn btn-primary">Login</button>
-			</form>
-		</div>
+		<footer class="footer">
+			<small>Timesheet Tracker • Local-only UI • Data via JSONBin</small>
+		</footer>
 	</div>
 </body>
 </html>
