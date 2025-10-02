@@ -1,14 +1,29 @@
 (function () {
 	"use strict";
 
+	// ======= CONFIG =======
 	const DESIGNERS = ["Rati", "Steven", "Cristian", "Santiago", "Andrea", "Valentina", "Megui"];
-	const STORAGE_KEY = "timesheet_entries_v6";
+	const STORAGE_KEY = "timesheet_entries_v7";
 	const TIMER_KEY = "timesheet_active_timer_v1";
 
+	// ======= SAFE DOM HELPERS =======
+	function $(id) { return document.getElementById(id); }
+	function on(id, event, handler) {
+		const el = $(id);
+		if (el) el.addEventListener(event, handler);
+	}
+	function safeValue(id) {
+		const el = $(id);
+		return (el && typeof el.value === "string") ? el.value : "";
+	}
+	function elExists(id) { return !!$(id); }
+
+	// ======= STATE =======
 	let entries = loadEntries();
 	let activeTimer = loadActiveTimer();
 	let timerInterval = null;
 
+	// ======= EXTERNAL LIBS (SheetJS + jsPDF optional) =======
 	function ensureSheetJSLoaded() {
 		return new Promise(resolve => {
 			if (window.XLSX) return resolve(true);
@@ -19,49 +34,11 @@
 			document.head.appendChild(s);
 		});
 	}
-
 	function ensureJsPDFLoaded() {
 		return Promise.resolve(!!window.jspdf || !!window.jspdf?.jsPDF || !!window.jsPDF);
 	}
 
-	function downloadBlob(blob, filename) {
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = filename;
-		document.body.appendChild(a);
-		a.click();
-		a.remove();
-		URL.revokeObjectURL(url);
-	}
-
-	function exportCSV(rows, filename) {
-		const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
-		const csv = [
-			headers.join(","),
-			...rows.map(r => headers.map(k => {
-				const val = r[k] ?? "";
-				const needQuote = /[",\n]/.test(String(val));
-				return needQuote ? `"${String(val).replace(/"/g, '""')}"` : String(val);
-			}).join(","))
-		].join("\n");
-		downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
-	}
-
-	async function copyCSVToClipboard(rows) {
-		const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
-		const csv = [
-			headers.join(","),
-			...rows.map(r => headers.map(k => {
-				const val = r[k] ?? "";
-				const needQuote = /[",\n]/.test(String(val));
-				return needQuote ? `"${String(val).replace(/"/g, '""')}"` : String(val);
-			}).join(","))
-		].join("\n");
-		await navigator.clipboard.writeText(csv);
-		alert("Copied CSV to clipboard.");
-	}
-
+	// ======= STORAGE =======
 	function loadEntries() {
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
@@ -81,7 +58,6 @@
 			return [];
 		}
 	}
-
 	function saveEntries() {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 	}
@@ -94,12 +70,12 @@
 			return null;
 		}
 	}
-
 	function saveActiveTimer() {
 		if (activeTimer) localStorage.setItem(TIMER_KEY, JSON.stringify(activeTimer));
 		else localStorage.removeItem(TIMER_KEY);
 	}
 
+	// ======= UTILS =======
 	function cryptoRandomId() {
 		if (window.crypto && window.crypto.getRandomValues) {
 			const buf = new Uint32Array(4);
@@ -108,7 +84,6 @@
 		}
 		return String(Date.now()) + Math.random().toString(16).slice(2);
 	}
-
 	function formatDate(ms) {
 		const d = new Date(ms);
 		return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
@@ -125,13 +100,13 @@
 		const s = sec % 60;
 		return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
 	}
-
 	function getWeekRangeFromInput(weekValue) {
 		if (!weekValue) return null;
 		const [yearStr, weekStr] = weekValue.split("-W");
 		const year = parseInt(yearStr, 10);
 		const week = parseInt(weekStr, 10);
 		if (!year || !week) return null;
+
 		const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
 		const dow = simple.getUTCDay() || 7;
 		const monday = new Date(simple);
@@ -141,33 +116,10 @@
 		sunday.setUTCDate(monday.getUTCDate() + 6);
 		return { startMs: monday.getTime(), endMs: sunday.getTime() + (24*60*60*1000 - 1) };
 	}
-
 	function eStart(e) { return e.startMs ?? e.endMs ?? 0; }
 	function eEnd(e) { return e.endMs ?? e.startMs ?? 0; }
 
-	function getSmartRange(kind) {
-		const now = new Date();
-		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-		if (kind === "today") {
-			const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
-			return { startMs: start, endMs: end };
-		}
-		if (kind === "week") {
-			const day = now.getDay() || 7; // Mon=1..Sun=7
-			const monday = new Date(now);
-			monday.setDate(now.getDate() - day + 1);
-			monday.setHours(0,0,0,0);
-			return { startMs: monday.getTime(), endMs: end };
-		}
-		if (kind === "last30") {
-			const start = new Date(now);
-			start.setDate(now.getDate() - 29);
-			start.setHours(0,0,0,0);
-			return { startMs: start.getTime(), endMs: end };
-		}
-		return null;
-	}
-
+	// Mentions parser: @Name where Name is in DESIGNERS
 	function parseMentions(text) {
 		if (!text) return [];
 		const names = new Set();
@@ -180,10 +132,11 @@
 		return Array.from(names);
 	}
 
+	// ======= FILTERS =======
 	function applyFilters(data) {
-		const designer = document.getElementById("filterDesigner").value;
-		const weekValue = document.getElementById("filterWeek").value;
-		const q = document.getElementById("searchInput").value.trim().toLowerCase();
+		const designer = safeValue("filterDesigner");
+		const weekValue = safeValue("filterWeek");
+		const q = safeValue("searchInput").trim().toLowerCase();
 
 		let filtered = data;
 		if (designer) filtered = filtered.filter(e => e.designer === designer);
@@ -198,7 +151,7 @@
 
 		if (q) {
 			filtered = filtered.filter(e => {
-				const hay = `${e.designer} ${e.task} ${e.comments}`.toLowerCase();
+				const hay = `${e.designer} ${e.task} ${e.comments || ""}`.toLowerCase();
 				return hay.includes(q);
 			});
 		}
@@ -207,9 +160,11 @@
 		return filtered;
 	}
 
+	// ======= RENDER: TABLE =======
 	function renderTable(data) {
-		const tbody = document.getElementById("entriesTbody");
-		const countEl = document.getElementById("entryCount");
+		if (!elExists("entriesTbody") || !elExists("entryCount")) return;
+		const tbody = $("entriesTbody");
+		const countEl = $("entryCount");
 		tbody.innerHTML = "";
 
 		for (const e of data) {
@@ -244,14 +199,17 @@
 			const tdActions = document.createElement("td");
 			const wrap = document.createElement("div");
 			wrap.className = "action-btns";
+
 			const editBtn = document.createElement("button");
 			editBtn.className = "action-mini secondary";
 			editBtn.textContent = "Edit";
 			editBtn.addEventListener("click", () => loadIntoForm(e.id));
+
 			const delBtn = document.createElement("button");
 			delBtn.className = "action-mini danger";
 			delBtn.textContent = "Delete";
 			delBtn.addEventListener("click", () => deleteEntry(e.id));
+
 			wrap.append(editBtn, delBtn);
 			tdActions.appendChild(wrap);
 
@@ -261,21 +219,23 @@
 		countEl.textContent = String(data.length);
 	}
 
+	// ======= RENDER: CARDS =======
 	function colorForDesigner(name) {
+		const css = getComputedStyle(document.documentElement);
 		const map = {
-			"Rati": getComputedStyle(document.documentElement).getPropertyValue("--rati").trim(),
-			"Steven": getComputedStyle(document.documentElement).getPropertyValue("--steven").trim(),
-			"Cristian": getComputedStyle(document.documentElement).getPropertyValue("--cristian").trim(),
-			"Santiago": getComputedStyle(document.documentElement).getPropertyValue("--santiago").trim(),
-			"Andrea": getComputedStyle(document.documentElement).getPropertyValue("--andrea").trim(),
-			"Valentina": getComputedStyle(document.documentElement).getPropertyValue("--valentina").trim(),
-			"Megui": getComputedStyle(document.documentElement).getPropertyValue("--megui").trim()
+			"Rati": css.getPropertyValue("--rati").trim(),
+			"Steven": css.getPropertyValue("--steven").trim(),
+			"Cristian": css.getPropertyValue("--cristian").trim(),
+			"Santiago": css.getPropertyValue("--santiago").trim(),
+			"Andrea": css.getPropertyValue("--andrea").trim(),
+			"Valentina": css.getPropertyValue("--valentina").trim(),
+			"Megui": css.getPropertyValue("--megui").trim()
 		};
 		return map[name] || null;
 	}
-
 	function renderCards(data) {
-		const container = document.getElementById("cardsContainer");
+		if (!elExists("cardsContainer")) return;
+		const container = $("cardsContainer");
 		container.innerHTML = "";
 
 		for (const e of data) {
@@ -285,7 +245,8 @@
 
 			const card = document.createElement("div");
 			card.className = "card-item";
-			card.style.borderLeft = colorForDesigner(e.designer) ? `4px solid ${colorForDesigner(e.designer)}` : "";
+			const col = colorForDesigner(e.designer);
+			if (col) card.style.borderLeft = `4px solid ${col}`;
 
 			const title = document.createElement("div");
 			title.style.fontWeight = "700";
@@ -308,7 +269,9 @@
 		}
 	}
 
+	// ======= RENDER: SUMMARY =======
 	function renderSummary(data) {
+		if (!elExists("dailySummary")) return;
 		const byDate = new Map();
 		for (const e of data) {
 			const dayKey = new Date(eStart(e) || eEnd(e)).toISOString().slice(0, 10);
@@ -319,7 +282,7 @@
 			map.set(e.designer, { tasks: prev.tasks + 1, duration: prev.duration + dur });
 		}
 
-		const container = document.getElementById("dailySummary");
+		const container = $("dailySummary");
 		container.innerHTML = "";
 
 		const datesSorted = Array.from(byDate.keys()).sort((a, b) => b.localeCompare(a));
@@ -330,7 +293,6 @@
 			const h4 = document.createElement("h4");
 			const d = new Date(day + "T00:00:00");
 			h4.textContent = d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-
 			card.appendChild(h4);
 
 			const map = byDate.get(day);
@@ -342,15 +304,16 @@
 				row.innerHTML = `<span style="border-left:4px solid ${colorForDesigner(name)}; padding-left:8px">${name}</span><span>${v.tasks} tasks • ${formatDuration(v.duration)}</span>`;
 				card.appendChild(row);
 			}
-
 			container.appendChild(card);
 		}
 	}
 
-	function renderFeed(data) {
-		const feed = document.getElementById("teamFeed");
+	// ======= RENDER: FEED =======
+	function renderFeed(allData) {
+		if (!elExists("teamFeed")) return;
+		const feed = $("teamFeed");
 		feed.innerHTML = "";
-		const sorted = [...data].sort((a, b) => eStart(b) - eStart(a)).slice(0, 50);
+		const sorted = [...allData].sort((a, b) => eStart(b) - eStart(a)).slice(0, 50);
 		for (const e of sorted) {
 			const item = document.createElement("div");
 			item.className = "feed-item";
@@ -361,6 +324,7 @@
 		}
 	}
 
+	// ======= MASTER RENDER =======
 	function triggerRender() {
 		const filtered = applyFilters(entries);
 		renderTable(filtered);
@@ -369,6 +333,7 @@
 		renderFeed(entries);
 	}
 
+	// ======= FORM HANDLERS =======
 	function parseManualDateTime(dateStr, timeStr) {
 		if (!dateStr || !timeStr) return null;
 		const [y, m, d] = dateStr.split("-").map(n => parseInt(n, 10));
@@ -378,48 +343,46 @@
 		dt.setHours(hh, mm, 0, 0);
 		return dt.getTime();
 	}
-
 	function resetForm() {
-		document.getElementById("entryId").value = "";
-		document.getElementById("designer").value = "";
-		document.getElementById("task").value = "";
-		document.getElementById("manualDate").value = "";
-		document.getElementById("startTime").value = "";
-		document.getElementById("endTime").value = "";
-		document.getElementById("comments").value = "";
+		if (!elExists("entryForm")) return;
+		if (elExists("entryId")) $("entryId").value = "";
+		if (elExists("designer")) $("designer").value = "";
+		if (elExists("task")) $("task").value = "";
+		if (elExists("manualDate")) $("manualDate").value = "";
+		if (elExists("startTime")) $("startTime").value = "";
+		if (elExists("endTime")) $("endTime").value = "";
+		if (elExists("comments")) $("comments").value = "";
 	}
-
 	function loadIntoForm(id) {
+		if (!elExists("entryForm")) return;
 		const e = entries.find(x => x.id === id);
 		if (!e) return;
-		document.getElementById("entryId").value = e.id;
-		document.getElementById("designer").value = e.designer;
-		document.getElementById("task").value = e.task;
+		if (elExists("entryId")) $("entryId").value = e.id;
+		if (elExists("designer")) $("designer").value = e.designer;
+		if (elExists("task")) $("task").value = e.task;
 		const dt = new Date(eStart(e));
-		document.getElementById("manualDate").value = dt.toISOString().slice(0, 10);
-		document.getElementById("startTime").value = e.startMs ? new Date(e.startMs).toISOString().slice(11,16) : "";
-		document.getElementById("endTime").value = e.endMs ? new Date(e.endMs).toISOString().slice(11,16) : "";
-		document.getElementById("comments").value = e.comments || "";
+		if (elExists("manualDate")) $("manualDate").value = dt.toISOString().slice(0, 10);
+		if (elExists("startTime")) $("startTime").value = e.startMs ? new Date(e.startMs).toISOString().slice(11,16) : "";
+		if (elExists("endTime")) $("endTime").value = e.endMs ? new Date(e.endMs).toISOString().slice(11,16) : "";
+		if (elExists("comments")) $("comments").value = e.comments || "";
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	}
-
 	function deleteEntry(id) {
 		if (!confirm("Delete this entry?")) return;
 		entries = entries.filter(e => e.id !== id);
 		saveEntries();
 		triggerRender();
 	}
-
 	function onSubmit(ev) {
 		ev.preventDefault();
-		const id = document.getElementById("entryId").value || cryptoRandomId();
-		const designer = document.getElementById("designer").value;
-		const task = document.getElementById("task").value.trim();
-		const comments = document.getElementById("comments").value.trim();
+		const id = elExists("entryId") && $("entryId").value ? $("entryId").value : cryptoRandomId();
+		const designer = safeValue("designer");
+		const task = safeValue("task").trim();
+		const comments = safeValue("comments").trim();
 		const mentions = parseMentions(comments);
-		const dateStr = document.getElementById("manualDate").value;
-		const startStr = document.getElementById("startTime").value;
-		const endStr = document.getElementById("endTime").value;
+		const dateStr = safeValue("manualDate");
+		const startStr = safeValue("startTime");
+		const endStr = safeValue("endTime");
 		if (!designer || !task) return;
 
 		let startMs = null, endMs = null;
@@ -433,18 +396,17 @@
 
 		const idx = entries.findIndex(e => e.id === id);
 		const payload = { id, designer, task, comments, mentions, startMs, endMs };
-		if (idx >= 0) entries[idx] = payload;
-		else entries.push(payload);
+		if (idx >= 0) entries[idx] = payload; else entries.push(payload);
 
 		saveEntries();
 		resetForm();
 		triggerRender();
 	}
 
-	// Timer
+	// ======= TIMER =======
 	function startTimer() {
-		const designer = document.getElementById("timerDesigner").value;
-		const task = document.getElementById("timerTask").value.trim();
+		const designer = safeValue("timerDesigner");
+		const task = safeValue("timerTask").trim();
 		if (!designer || !task) return;
 		activeTimer = { id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs: Date.now() };
 		saveActiveTimer();
@@ -460,26 +422,66 @@
 		activeTimer = null;
 		saveActiveTimer();
 		if (timerInterval) clearInterval(timerInterval);
-		document.getElementById("timerStatus").textContent = "00:00:00";
+		if (elExists("timerStatus")) $("timerStatus").textContent = "00:00:00";
 		updateTimerButtons();
 		triggerRender();
 	}
 	function runTimerTick() {
-		if (!activeTimer) return;
+		if (!activeTimer || !elExists("timerStatus")) return;
 		const elapsed = Date.now() - activeTimer.startMs;
-		document.getElementById("timerStatus").textContent = formatDuration(elapsed);
+		$("timerStatus").textContent = formatDuration(elapsed);
 	}
 	function updateTimerButtons() {
-		const startBtn = document.getElementById("startTimer");
-		const stopBtn = document.getElementById("stopTimer");
+		if (!elExists("startTimer") || !elExists("stopTimer")) return;
+		const startBtn = $("startTimer");
+		const stopBtn = $("stopTimer");
 		if (activeTimer) { startBtn.disabled = true; stopBtn.disabled = false; }
 		else { startBtn.disabled = false; stopBtn.disabled = true; }
 	}
 
-	// Export helpers
+	// ======= EXPORT =======
+	function downloadBlob(blob, filename) {
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		URL.revokeObjectURL(url);
+	}
+	function exportCSV(rows, filename) {
+		const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
+		const csv = [
+			headers.join(","),
+			...rows.map(r => headers.map(k => {
+				const val = r[k] ?? "";
+				const needQuote = /[",\n]/.test(String(val));
+				return needQuote ? `"${String(val).replace(/"/g, '""')}"` : String(val);
+			}).join(","))
+		].join("\n");
+		downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
+	}
+	async function copyCSVToClipboard(rows) {
+		try {
+			const headers = Object.keys(rows[0] || { Designer:"", Date:"", Start:"", End:"", Duration:"", Task:"", Comments:"" });
+			const csv = [
+				headers.join(","),
+				...rows.map(r => headers.map(k => {
+					const val = r[k] ?? "";
+					const needQuote = /[",\n]/.test(String(val));
+					return needQuote ? `"${String(val).replace(/"/g, '""')}"` : String(val);
+				}).join(","))
+			].join("\n");
+			await navigator.clipboard.writeText(csv);
+			alert("Copied CSV to clipboard.");
+		} catch {
+			alert("Clipboard copy failed. Your browser may block clipboard access.");
+		}
+	}
 	function getExportRange() {
-		const s = document.getElementById("exportStart").value;
-		const e = document.getElementById("exportEnd").value;
+		const s = safeValue("exportStart");
+		const e = safeValue("exportEnd");
 		if (!s && !e) return null;
 		const startMs = s ? new Date(s + "T00:00:00").getTime() : 0;
 		const endMs = e ? new Date(e + "T23:59:59").getTime() : Number.MAX_SAFE_INTEGER;
@@ -494,7 +496,6 @@
 			return t >= range.startMs && t <= range.endMs;
 		});
 	}
-
 	async function toExcel() {
 		const data = getFilteredForExport();
 		if (data.length === 0) { alert("No data to export."); return; }
@@ -525,10 +526,8 @@
 				console.error("XLSX export failed:", err);
 			}
 		}
-		// Fallback to CSV file
 		exportCSV(rows, "timesheet.csv");
 	}
-
 	async function toPdf() {
 		const data = getFilteredForExport();
 		if (data.length === 0) { alert("No data to export."); return; }
@@ -538,16 +537,12 @@
 		const doc = new jsPDF({ unit: "pt", format: "a4" });
 		const margin = 40;
 		let y = margin;
-		doc.setFont("helvetica", "bold");
-		doc.setFontSize(14);
-		doc.text("Timesheet Export", margin, y);
-		y += 20;
-		doc.setFont("helvetica", "normal");
-		doc.setFontSize(10);
+		doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+		doc.text("Timesheet Export", margin, y); y += 20;
+		doc.setFont("helvetica", "normal"); doc.setFontSize(10);
 
 		const headers = ["Designer", "Date", "Start", "End", "Duration", "Task"];
-		doc.text(headers.join("  |  "), margin, y);
-		y += 14;
+		doc.text(headers.join("  |  "), margin, y); y += 14;
 		for (const e of data) {
 			const start = eStart(e), end = eEnd(e);
 			const row = [
@@ -565,52 +560,70 @@
 		doc.save("timesheet.pdf");
 	}
 
-	// Events
-	function onSmartRangeClick(kind) {
-		const r = getSmartRange(kind);
-		if (!r) return;
-		// Clear week filter and search, then apply date range via export fields to make it visible
-		document.getElementById("filterWeek").value = "";
-		document.getElementById("searchInput").value = "";
-		document.getElementById("exportStart").value = new Date(r.startMs).toISOString().slice(0,10);
-		document.getElementById("exportEnd").value = new Date(r.endMs).toISOString().slice(0,10);
-		triggerRender();
+	// ======= SMART RANGES =======
+	function getSmartRange(kind) {
+		const now = new Date();
+		const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+		if (kind === "today") {
+			const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime();
+			return { startMs: start, endMs: end };
+		}
+		if (kind === "week") {
+			const day = now.getDay() || 7; // Mon=1..Sun=7
+			const monday = new Date(now);
+			monday.setDate(now.getDate() - day + 1);
+			monday.setHours(0,0,0,0);
+			return { startMs: monday.getTime(), endMs: end };
+		}
+		if (kind === "last30") {
+			const start = new Date(now);
+			start.setDate(now.getDate() - 29);
+			start.setHours(0,0,0,0);
+			return { startMs: start.getTime(), endMs: end };
+		}
+		return null;
 	}
 
-	function clearFilters() {
-		document.getElementById("filterDesigner").value = "";
-		document.getElementById("filterWeek").value = "";
-		document.getElementById("searchInput").value = "";
-		document.getElementById("exportStart").value = "";
-		document.getElementById("exportEnd").value = "";
-		triggerRender();
-	}
-
+	// ======= UI EVENTS (SAFE) =======
 	function initEvents() {
-		document.getElementById("entryForm").addEventListener("submit", onSubmit);
-		document.getElementById("resetForm").addEventListener("click", resetForm);
-		document.getElementById("filterDesigner").addEventListener("change", triggerRender);
-		document.getElementById("filterWeek").addEventListener("change", triggerRender);
-		document.getElementById("searchInput").addEventListener("input", triggerRender);
-		document.getElementById("toggleView").addEventListener("click", () => {
-			const btn = document.getElementById("toggleView");
-			const isTable = btn.getAttribute("data-view") === "table";
+		// Form
+		on("entryForm", "submit", onSubmit);
+		on("resetForm", "click", resetForm);
+
+		// Filters
+		on("filterDesigner", "change", triggerRender);
+		on("filterWeek", "change", triggerRender);
+		on("searchInput", "input", triggerRender);
+
+		// View toggle
+		on("toggleView", "click", () => {
+			const btn = $("toggleView");
+			const isTable = btn && btn.getAttribute("data-view") === "table";
 			if (isTable) {
-				document.getElementById("tableView").hidden = true;
-				document.getElementById("cardsView").hidden = false;
-				btn.textContent = "Table View";
-				btn.setAttribute("data-view", "cards");
+				if (elExists("tableView")) $("tableView").hidden = true;
+				if (elExists("cardsView")) $("cardsView").hidden = false;
+				if (btn) { btn.textContent = "Table View"; btn.setAttribute("data-view", "cards"); }
 			} else {
-				document.getElementById("tableView").hidden = false;
-				document.getElementById("cardsView").hidden = true;
-				btn.textContent = "Cards View";
-				btn.setAttribute("data-view", "table");
+				if (elExists("tableView")) $("tableView").hidden = false;
+				if (elExists("cardsView")) $("cardsView").hidden = true;
+				if (btn) { btn.textContent = "Cards View"; btn.setAttribute("data-view", "table"); }
 			}
 		});
-		document.getElementById("clearFilters").addEventListener("click", clearFilters);
-		document.getElementById("downloadExcel").addEventListener("click", toExcel);
-		document.getElementById("downloadPdf").addEventListener("click", toPdf);
-		document.getElementById("copyCsv").addEventListener("click", () => {
+
+		// Clear filters
+		on("clearFilters", "click", () => {
+			if (elExists("filterDesigner")) $("filterDesigner").value = "";
+			if (elExists("filterWeek")) $("filterWeek").value = "";
+			if (elExists("searchInput")) $("searchInput").value = "";
+			if (elExists("exportStart")) $("exportStart").value = "";
+			if (elExists("exportEnd")) $("exportEnd").value = "";
+			triggerRender();
+		});
+
+		// Exports
+		on("downloadExcel", "click", toExcel);
+		on("downloadPdf", "click", toPdf);
+		on("copyCsv", "click", () => {
 			const data = getFilteredForExport();
 			if (data.length === 0) { alert("No data to copy."); return; }
 			const rows = data.map(e => {
@@ -628,14 +641,26 @@
 			copyCSVToClipboard(rows);
 		});
 
+		// Smart quick ranges (if present)
 		document.querySelectorAll(".smart").forEach(btn => {
-			btn.addEventListener("click", () => onSmartRangeClick(btn.getAttribute("data-range")));
+			btn.addEventListener("click", () => {
+				const kind = btn.getAttribute("data-range");
+				const r = getSmartRange(kind);
+				if (!r) return;
+				if (elExists("filterWeek")) $("filterWeek").value = "";
+				if (elExists("searchInput")) $("searchInput").value = "";
+				if (elExists("exportStart")) $("exportStart").value = new Date(r.startMs).toISOString().slice(0,10);
+				if (elExists("exportEnd")) $("exportEnd").value = new Date(r.endMs).toISOString().slice(0,10);
+				triggerRender();
+			});
 		});
 
-		document.getElementById("startTimer").addEventListener("click", startTimer);
-		document.getElementById("stopTimer").addEventListener("click", stopTimer);
+		// Timer
+		on("startTimer", "click", startTimer);
+		on("stopTimer", "click", stopTimer);
 	}
 
+	// ======= INIT =======
 	function init() {
 		initEvents();
 		updateTimerButtons();
