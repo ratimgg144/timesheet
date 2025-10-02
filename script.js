@@ -49,9 +49,10 @@
 
 	// ======= JSONBIN CLIENT =======
 	async function jsonbinGetLatest() {
-		const url = `${JSONBIN_BASE}/b/${JSONBIN_BIN_ID}/latest`;
+		const url = `${JSONBIN_BASE}/b/${JSONBIN_BIN_ID}/latest?ts=${Date.now()}`;
 		const res = await fetch(url, {
 			method: "GET",
+			cache: "no-store",
 			headers: {
 				"X-Master-Key": JSONBIN_KEY,
 				"X-Bin-Meta": "false"
@@ -135,17 +136,19 @@
 		}
 	}
 
-	let saveDebounce;
 	function remoteSaveAllNow() {
 		const payload = { entries, activeTimer };
 		return withRetry(() => jsonbinPut(payload)).catch(err => {
 			console.error("jsonbin save failed:", err);
 		});
 	}
-	function remoteSaveAllDebounced() {
-		clearTimeout(saveDebounce);
-		saveDebounce = setTimeout(remoteSaveAllNow, 500);
-	}
+
+	// Optional: keep debounced for bulk ops, but call Now at critical moments
+	let saveDebounce;
+function remoteSaveAllDebounced() {
+	clearTimeout(saveDebounce);
+	saveDebounce = setTimeout(remoteSaveAllNow, 400);
+}
 
 	// Optional one-time migration (push local to remote if remote is empty)
 	async function migrateLocalToJsonBinIfEmpty() {
@@ -460,7 +463,7 @@
 	function deleteEntry(id) {
 		if (!confirm("Delete this entry?")) return;
 		entries = entries.filter(e => e.id !== id);
-		remoteSaveAllDebounced();
+		remoteSaveAllNow();
 		triggerRender();
 	}
 	function onSubmit(ev) {
@@ -488,7 +491,7 @@
 		const payload = { id, designer, task, comments, mentions, startMs, endMs };
 		if (idx >= 0) entries[idx] = payload; else entries.push(payload);
 
-		remoteSaveAllDebounced();
+		remoteSaveAllNow();
 		resetForm();
 		triggerRender();
 	}
@@ -499,7 +502,7 @@
 		const task = safeValue("timerTask").trim();
 		if (!designer || !task) return;
 		activeTimer = { id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs: Date.now() };
-		remoteSaveAllDebounced();
+		remoteSaveAllNow();
 		updateTimerButtons();
 		runTimerTick();
 		timerInterval = setInterval(runTimerTick, 1000);
@@ -509,7 +512,7 @@
 		const endMs = Date.now();
 		entries.push({ ...activeTimer, endMs });
 		activeTimer = null;
-		remoteSaveAllDebounced();
+		remoteSaveAllNow();
 		if (timerInterval) clearInterval(timerInterval);
 		if (elExists("timerStatus")) $("timerStatus").textContent = "00:00:00";
 		updateTimerButtons();
