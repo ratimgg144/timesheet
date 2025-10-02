@@ -1,10 +1,19 @@
 (function () {
 	"use strict";
 
+	console.log("Timesheet JS v8 (jsonbin)");
+
 	// ======= CONFIG =======
 	const DESIGNERS = ["Rati", "Steven", "Cristian", "Santiago", "Andrea", "Valentina", "Megui"];
-	const STORAGE_KEY = "timesheet_entries_v7";
-	const TIMER_KEY = "timesheet_active_timer_v1";
+
+	// Old local keys kept only for optional offline fallback/migration
+	const STORAGE_KEY = "timesheet_entries_v7_local";
+	const TIMER_KEY = "timesheet_active_timer_v1_local";
+
+	// ======= JSONBIN CONFIG (you provided these) =======
+	const JSONBIN_BIN_ID = "68dea90943b1c97be9581d23";
+	const JSONBIN_KEY = "$2a$10$BCr/smrghzHthU4HHCysDuyzqeijFau.xhq.R3rANk1Qdw1pVW2aS";
+	const JSONBIN_BASE = "https://api.jsonbin.io/v3";
 
 	// ======= SAFE DOM HELPERS =======
 	function $(id) { return document.getElementById(id); }
@@ -19,11 +28,11 @@
 	function elExists(id) { return !!$(id); }
 
 	// ======= STATE =======
-	let entries = loadEntries();
-	let activeTimer = loadActiveTimer();
+	let entries = [];
+	let activeTimer = null;
 	let timerInterval = null;
 
-	// ======= EXTERNAL LIBS (SheetJS + jsPDF optional) =======
+	// ======= EXTERNAL LIBS =======
 	function ensureSheetJSLoaded() {
 		return new Promise(resolve => {
 			if (window.XLSX) return resolve(true);
@@ -38,41 +47,123 @@
 		return Promise.resolve(!!window.jspdf || !!window.jspdf?.jsPDF || !!window.jsPDF);
 	}
 
-	// ======= STORAGE =======
-	function loadEntries() {
+	// ======= JSONBIN CLIENT =======
+	async function jsonbinGetLatest() {
+		const url = `${JSONBIN_BASE}/b/${JSONBIN_BIN_ID}/latest`;
+		const res = await fetch(url, {
+			method: "GET",
+			headers: {
+				"X-Master-Key": JSONBIN_KEY,
+				"X-Bin-Meta": "false"
+			}
+		});
+		if (!res.ok) throw new Error(`GET failed: ${res.status}`);
+		return await res.json(); // expect { entries: [...], activeTimer: {...}|null }
+	}
+
+	async function jsonbinPut(data) {
+		const url = `${JSONBIN_BASE}/b/${JSONBIN_BIN_ID}`;
+		const res = await fetch(url, {
+			method: "PUT",
+			headers: {
+				"Content-Type": "application/json",
+				"X-Master-Key": JSONBIN_KEY,
+				"X-Bin-Meta": "false"
+			},
+			body: JSON.stringify(data)
+		});
+		if (!res.ok) throw new Error(`PUT failed: ${res.status}`);
+		return await res.json();
+	}
+
+	async function withRetry(fn, attempts = 2) {
+		let lastErr;
+		for (let i = 0; i < attempts; i++) {
+			try { return await fn(); }
+			catch (e) { lastErr = e; await new Promise(r => setTimeout(r, 400)); }
+		}
+		throw lastErr;
+	}
+
+	// ======= LOCAL FALLBACK (optional) =======
+	function localLoadEntries() {
 		try {
 			const raw = localStorage.getItem(STORAGE_KEY);
 			if (!raw) return [];
 			const parsed = JSON.parse(raw);
 			if (!Array.isArray(parsed)) return [];
-			return parsed.map(x => ({
-				id: x.id || cryptoRandomId(),
-				designer: String(x.designer || ""),
-				task: String(x.task || ""),
-				comments: String(x.comments || ""),
-				mentions: Array.isArray(x.mentions) ? x.mentions.filter(Boolean) : [],
-				startMs: isFinite(x.startMs) ? Number(x.startMs) : (isFinite(x.timestamp) ? Number(x.timestamp) : null),
-				endMs: isFinite(x.endMs) ? Number(x.endMs) : null
-			})).filter(e => e.designer && e.task && (e.startMs || e.endMs));
-		} catch {
-			return [];
-		}
+			return parsed;
+		} catch { return []; }
 	}
-	function saveEntries() {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-	}
-
-	function loadActiveTimer() {
+	function localLoadActiveTimer() {
 		try {
 			const raw = localStorage.getItem(TIMER_KEY);
 			return raw ? JSON.parse(raw) : null;
-		} catch {
-			return null;
+		} catch { return null; }
+	}
+
+	// ======= REMOTE LOAD/SAVE =======
+	async function remoteLoadAll() {
+		try {
+			const data = await withRetry(() => jsonbinGetLatest());
+			const safe = data && typeof data === "object" ? data : {};
+			const loadedEntries = Array.isArray(safe.entries) ? safe.entries : [];
+			const loadedTimer = safe.activeTimer && typeof safe.activeTimer === "object" ? safe.activeTimer : null;
+
+			entries = loadedEntries.map(x => ({
+				id: String(x.id),
+				designer: String(x.designer || ""),
+				task: String(x.task || ""),
+				comments: String(x.comments || ""),
+				mentions: Array.isArray(x.mentions) ? x.mentions : [],
+				startMs: isFinite(x.startMs) ? Number(x.startMs) : null,
+				endMs: isFinite(x.endMs) ? Number(x.endMs) : null
+			})).filter(e => e.designer && e.task && (e.startMs || e.endMs));
+
+			activeTimer = loadedTimer && loadedTimer.startMs ? {
+				id: String(loadedTimer.id),
+				designer: String(loadedTimer.designer),
+				task: String(loadedTimer.task),
+				comments: String(loadedTimer.comments || ""),
+				mentions: Array.isArray(loadedTimer.mentions) ? loadedTimer.mentions : [],
+				startMs: Number(loadedTimer.startMs)
+			} : null;
+		} catch (e) {
+			console.warn("jsonbin load failed, using local fallback:", e);
+			entries = localLoadEntries();
+			activeTimer = localLoadActiveTimer();
 		}
 	}
-	function saveActiveTimer() {
-		if (activeTimer) localStorage.setItem(TIMER_KEY, JSON.stringify(activeTimer));
-		else localStorage.removeItem(TIMER_KEY);
+
+	let saveDebounce;
+	function remoteSaveAllNow() {
+		const payload = { entries, activeTimer };
+		return withRetry(() => jsonbinPut(payload)).catch(err => {
+			console.error("jsonbin save failed:", err);
+		});
+	}
+	function remoteSaveAllDebounced() {
+		clearTimeout(saveDebounce);
+		saveDebounce = setTimeout(remoteSaveAllNow, 500);
+	}
+
+	// Optional one-time migration (push local to remote if remote is empty)
+	async function migrateLocalToJsonBinIfEmpty() {
+		try {
+			const data = await jsonbinGetLatest();
+			const isEmpty = !data || !Array.isArray(data.entries) || data.entries.length === 0;
+			if (isEmpty) {
+				const localE = localLoadEntries();
+				const localT = localLoadActiveTimer();
+				if (localE && localE.length) {
+					entries = localE;
+					activeTimer = localT || null;
+					await remoteSaveAllNow();
+				}
+			}
+		} catch (e) {
+			console.warn("Migration skipped:", e);
+		}
 	}
 
 	// ======= UTILS =======
@@ -119,7 +210,6 @@
 	function eStart(e) { return e.startMs ?? e.endMs ?? 0; }
 	function eEnd(e) { return e.endMs ?? e.startMs ?? 0; }
 
-	// Mentions parser: @Name where Name is in DESIGNERS
 	function parseMentions(text) {
 		if (!text) return [];
 		const names = new Set();
@@ -370,7 +460,7 @@
 	function deleteEntry(id) {
 		if (!confirm("Delete this entry?")) return;
 		entries = entries.filter(e => e.id !== id);
-		saveEntries();
+		remoteSaveAllDebounced();
 		triggerRender();
 	}
 	function onSubmit(ev) {
@@ -398,7 +488,7 @@
 		const payload = { id, designer, task, comments, mentions, startMs, endMs };
 		if (idx >= 0) entries[idx] = payload; else entries.push(payload);
 
-		saveEntries();
+		remoteSaveAllDebounced();
 		resetForm();
 		triggerRender();
 	}
@@ -409,7 +499,7 @@
 		const task = safeValue("timerTask").trim();
 		if (!designer || !task) return;
 		activeTimer = { id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs: Date.now() };
-		saveActiveTimer();
+		remoteSaveAllDebounced();
 		updateTimerButtons();
 		runTimerTick();
 		timerInterval = setInterval(runTimerTick, 1000);
@@ -418,9 +508,8 @@
 		if (!activeTimer) return;
 		const endMs = Date.now();
 		entries.push({ ...activeTimer, endMs });
-		saveEntries();
 		activeTimer = null;
-		saveActiveTimer();
+		remoteSaveAllDebounced();
 		if (timerInterval) clearInterval(timerInterval);
 		if (elExists("timerStatus")) $("timerStatus").textContent = "00:00:00";
 		updateTimerButtons();
@@ -500,8 +589,8 @@
 		const data = getFilteredForExport();
 		if (data.length === 0) { alert("No data to export."); return; }
 		const rows = data.map(e => {
-			const start = eStart(e), end = eEnd(e);
-			return {
+		 const start = eStart(e), end = eEnd(e);
+		 return {
 				Designer: e.designer,
 				Date: new Date(start || end).toISOString().slice(0, 10),
 				Start: start ? new Date(start).toLocaleTimeString() : "",
@@ -628,7 +717,7 @@
 			if (data.length === 0) { alert("No data to copy."); return; }
 			const rows = data.map(e => {
 				const start = eStart(e), end = eEnd(e);
-				return {
+			 return {
 					Designer: e.designer,
 					Date: new Date(start || end).toISOString().slice(0, 10),
 					Start: start ? new Date(start).toLocaleTimeString() : "",
@@ -661,7 +750,9 @@
 	}
 
 	// ======= INIT =======
-	function init() {
+	async function init() {
+		await remoteLoadAll();
+		await migrateLocalToJsonBinIfEmpty(); // optional
 		initEvents();
 		updateTimerButtons();
 		if (activeTimer) {
