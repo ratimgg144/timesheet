@@ -49,11 +49,7 @@ html, body {
 	margin: -24px -16px 24px;
 	padding: 10px 16px;
 }
-.brand {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-}
+.brand { display: flex; align-items: center; gap: 10px; }
 #brandLogo { height: 28px; width: auto; object-fit: contain; filter: drop-shadow(0 1px 0 rgba(0,0,0,0.2)); }
 .brand-txt { display: flex; flex-direction: column; line-height: 1.1; }
 .brand-txt strong { font-size: 16px; }
@@ -104,7 +100,7 @@ label { color: var(--muted); margin-bottom: 6px; font-size: 12px; }
 
 .help { color: var(--muted); margin-top: 6px; font-size: 12px; }
 
-input[type="text"], select, input[type="week"], input[type="date"], input[type="time"] {
+input[type="text"], select, input[type="week"], input[type="date"], input[type="time"], input[type="password"] {
 	background: var(--bg-soft);
 	color: var(--text);
 	border: 1px solid var(--border);
@@ -113,7 +109,7 @@ input[type="text"], select, input[type="week"], input[type="date"], input[type="
 	outline: none;
 	transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-input[type="text"]:focus, select:focus, input[type="week"]:focus, input[type="date"]:focus, input[type="time"]:focus {
+input[type="text"]:focus, select:focus, input[type="week"]:focus, input[type="date"]:focus, input[type="time"]:focus, input[type="password"]:focus {
 	border-color: #2b7eb0;
 	box-shadow: 0 0 0 3px rgba(86,166,213,0.25);
 }
@@ -171,7 +167,7 @@ tr[data-designer="Megui"] td:first-child { border-left: 4px solid var(--megui); 
 .card-item { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .card-item .meta { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; }
 
-/* Layout: entries + feed */
+/* Feed */
 .grid-2 { display: grid; grid-template-columns: 1.8fr 1fr; gap: 16px; }
 .aside-title { margin: 0 0 8px 0; }
 .feed { max-height: 520px; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
@@ -183,6 +179,31 @@ tr[data-designer="Megui"] td:first-child { border-left: 4px solid var(--megui); 
 .summary-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
 .summary-card h4 { margin: 0 0 6px 0; font-size: 14px; }
 .summary-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+
+/* Chat */
+.chat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.chat-messages {
+	height: 280px;
+	overflow: auto;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	background: var(--bg-soft);
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.chat-msg {
+	display: inline-flex;
+	max-width: 80%;
+	padding: 8px 10px;
+	border-radius: 10px;
+	border: 1px solid var(--border);
+	background: #0e1529;
+}
+.chat-msg.me { align-self: flex-end; background: #113047; border-color: #234e6c; }
+.chat-meta { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.chat-input { display: flex; gap: 8px; margin-top: 10px; }
 
 .footer { display: flex; justify-content: center; color: var(--muted); margin-top: 12px; font-size: 12px; }
 
