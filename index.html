@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Timesheet Tracker</title>
+	<link rel="stylesheet" href="styles.css" />
+	<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+	<script src="script.js" defer></script>
+</head>
+<body>
+	<div class="container">
+		<header class="topbar">
+			<div class="brand">
+				<img id="brandLogo" src="https://i.ibb.co/tw9nL9M1/Group-1171275608.png" alt="Target Test Prep" />
+				<div class="brand-txt">
+					<strong>Timesheet</strong>
+					<span>Design Team</span>
+				</div>
+			</div>
+		</header>
+
+		<section class="toolbar card">
+			<div class="filters">
+				<div class="filter">
+					<label for="filterDesigner">Designer</label>
+					<select id="filterDesigner">
+						<option value="">All Designers</option>
+						<option value="Rati" data-color="rati">Rati</option>
+						<option value="Steven" data-color="steven">Steven</option>
+						<option value="Cristian" data-color="cristian">Cristian</option>
+						<option value="Santiago" data-color="santiago">Santiago</option>
+						<option value="Andrea" data-color="andrea">Andrea</option>
+						<option value="Valentina" data-color="valentina">Valentina</option>
+						<option value="Megui" data-color="megui">Megui</option>
+					</select>
+				</div>
+				<div class="filter">
+					<label for="filterWeek">Week</label>
+					<input type="week" id="filterWeek" />
+				</div>
+				<div class="actions">
+					<button id="toggleView" class="btn secondary" data-view="table" title="Switch to cards">Cards View</button>
+					<button id="clearFilters" class="btn secondary">Clear</button>
+					<button id="downloadExcel" class="btn">Download as Excel</button>
+				</div>
+			</div>
+		</section>
+
+		<section class="card">
+			<h2>Add Time Entry</h2>
+			<form id="entryForm">
+				<div class="form-row">
+					<div class="field">
+						<label for="designer">Designer</label>
+						<select id="designer" required>
+							<option value="" disabled selected>Select designer</option>
+							<option value="Rati" data-color="rati">Rati</option>
+							<option value="Steven" data-color="steven">Steven</option>
+							<option value="Cristian" data-color="cristian">Cristian</option>
+							<option value="Santiago" data-color="santiago">Santiago</option>
+							<option value="Andrea" data-color="andrea">Andrea</option>
+							<option value="Valentina" data-color="valentina">Valentina</option>
+							<option value="Megui" data-color="megui">Megui</option>
+						</select>
+					</div>
+					<div class="field flex-1">
+						<label for="task">Task</label>
+						<input type="text" id="task" placeholder="Describe the task..." maxlength="200" required />
+					</div>
+				</div>
+
+				<div class="form-row">
+					<div class="field">
+						<label for="manualDate">Date</label>
+						<input type="date" id="manualDate" />
+					</div>
+					<div class="field">
+						<label for="startTime">Start Time</label>
+						<input type="time" id="startTime" step="60" />
+					</div>
+					<div class="field">
+						<label for="endTime">End Time</label>
+						<input type="time" id="endTime" step="60" />
+					</div>
+					<div class="field">
+						<label>&nbsp;</label>
+						<button type="submit" class="btn">Save Entry</button>
+					</div>
+				</div>
+				<p class="help">Leave times empty to auto-capture current timestamp.</p>
+			</form>
+		</section>
+
+		<section class="card">
+			<div class="timer">
+				<div class="timer-controls">
+					<select id="timerDesigner">
+						<option value="" disabled selected>Designer for Timer</option>
+						<option value="Rati">Rati</option>
+						<option value="Steven">Steven</option>
+						<option value="Cristian">Cristian</option>
+						<option value="Santiago">Santiago</option>
+						<option value="Andrea">Andrea</option>
+						<option value="Valentina">Valentina</option>
+						<option value="Megui">Megui</option>
+					</select>
+					<input type="text" id="timerTask" placeholder="Task name for timer..." />
+					<button id="startTimer" class="btn">Start Task</button>
+					<button id="stopTimer" class="btn secondary" disabled>Stop Task</button>
+					<div class="timer-status" id="timerStatus">00:00:00</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="card">
+			<div class="table-header">
+				<h2>Time Entries</h2>
+				<div class="count"><span id="entryCount">0</span> entries</div>
+			</div>
+
+			<div id="tableView" class="table-wrapper">
+				<table id="entriesTable">
+					<thead>
+						<tr>
+							<th>Designer</th>
+							<th>Date</th>
+							<th>Start</th>
+							<th>End</th>
+							<th>Duration</th>
+							<th>Task</th>
+						</tr>
+					</thead>
+					<tbody id="entriesTbody"></tbody>
+				</table>
+			</div>
+
+			<div id="cardsView" class="cards-wrapper" hidden>
+				<div id="cardsContainer" class="cards"></div>
+			</div>
+		</section>
+
+		<section class="card">
+			<h2>Daily Summary</h2>
+			<div id="dailySummary" class="summary-grid"></div>
+		</section>
+
+		<footer class="footer">
+			<small>Timesheet Tracker • Local-only • No backend required</small>
+		</footer>
+	</div>
+</body>
+</html>
