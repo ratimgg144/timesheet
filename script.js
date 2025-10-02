@@ -375,7 +375,8 @@
 	function renderChatMessages() {
 		const box = $("chatMessages");
 		box.innerHTML = "";
-		for (const m of chatMessages.sort((a,b)=>a.ts-b.ts)) {
+		// Sort by timestamp descending (newest first) then reverse to show newest at bottom
+		for (const m of chatMessages.sort((a,b)=>b.ts-a.ts).reverse()) {
 			const wrap = document.createElement("div");
 			const meta = document.createElement("div"); meta.className = "chat-meta";
 			meta.textContent = `${m.designer} • ${new Date(m.ts).toLocaleTimeString()}`;
