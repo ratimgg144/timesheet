@@ -188,7 +188,22 @@
 	function eStart(e) { return e.startMs ?? e.endMs ?? 0; }
 	function eEnd(e) { return e.endMs ?? e.startMs ?? 0; }
 
-	// ======= FILTERS/RENDER BASIC =======
+    // ======= FILTERS/RENDER BASIC =======
+// Badge helpers
+function badgeForPriority(p) {
+        const span = document.createElement("span");
+        span.className = "badge " + (p === "High" ? "priority-high" : p === "Low" ? "priority-low" : "priority-medium");
+        span.textContent = p;
+        return span;
+}
+function badgeForStatus(s) {
+        const span = document.createElement("span");
+        const key = (s || "").toLowerCase().replace(/\s+/g, "");
+        span.className = "badge status-" + key;
+        span.textContent = s;
+        return span;
+}
+
 function applyFilters(data) {
 		const designer = safeValue("filterDesigner");
 		const weekValue = safeValue("filterWeek");
@@ -215,7 +230,7 @@ function applyFilters(data) {
 		return filtered;
 }
 
-	function renderTable(data) {
+    function renderTable(data) {
 		if (!elExists("entriesTbody") || !elExists("entryCount")) return;
 		const tbody = $("entriesTbody"), countEl = $("entryCount");
 		tbody.innerHTML = "";
@@ -229,10 +244,12 @@ function applyFilters(data) {
 			tagsTd.className = "cell-tags";
 			const threadTd = document.createElement("td");
 			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); threadTd.appendChild(threadLink);
-			tr.append(
-				c(e.designer),
-				c(Object.assign(badgeForPriority(e.priority || "Medium"), { dataset: { role: "priority" } })),
-				c(Object.assign(badgeForStatus(e.status || "In Progress"), { dataset: { role: "status" } })),
+            const pEl = badgeForPriority(e.priority || "Medium"); pEl.dataset.role = "priority";
+            const sEl = badgeForStatus(e.status || "In Progress"); sEl.dataset.role = "status";
+            tr.append(
+                c(e.designer),
+                c(pEl),
+                c(sEl),
 				c(formatDate(start || end)),
 				c(start ? formatTime(start) : "—"),
 				c(end ? formatTime(end) : "—"),
@@ -363,6 +380,43 @@ function wireInlineEditing() {
 				});
 			}
 		}
+
+// ======= THREADS PER TASK =======
+let openThreadTaskId = null;
+function openThread(taskId) {
+        openThreadTaskId = taskId;
+        const e = entries.find(x => x.id === taskId);
+        if (!e) return;
+        if (elExists("threadPanel")) {
+                $("threadPanel").hidden = false;
+                $("threadMeta").textContent = `${e.designer} • ${e.task}`;
+                renderThreadMessages(e);
+        }
+}
+function closeThread() { if (elExists("threadPanel")) $("threadPanel").hidden = true; openThreadTaskId = null; }
+function renderThreadMessages(e) {
+        const box = $("threadMessages"); if (!box) return;
+        box.innerHTML = "";
+        for (const m of (e.thread||[]).sort((a,b)=>a.ts-b.ts)) {
+                const meta = document.createElement("div"); meta.className = "chat-meta"; meta.textContent = `${m.designer} • ${new Date(m.ts).toLocaleString()}`;
+                const msg = document.createElement("div"); msg.className = "chat-msg"; if (chatUser && chatUser === m.designer) msg.classList.add("me"); msg.textContent = m.text;
+                const item = document.createElement("div"); item.append(meta, msg); box.appendChild(item);
+        }
+        box.scrollTop = box.scrollHeight;
+}
+function addThreadComment() {
+        if (!openThreadTaskId) return;
+        const e = entries.find(x => x.id === openThreadTaskId);
+        if (!e) return;
+        const text = safeValue("threadInput").trim(); if (!text) return;
+        const who = chatUser || safeValue("chatDesigner") || "Anon";
+        const m = { id: cryptoRandomId(), designer: who, text, ts: Date.now() };
+        e.thread = Array.isArray(e.thread) ? e.thread : [];
+        e.thread.push(m);
+        if (elExists("threadInput")) $("threadInput").value = "";
+        renderThreadMessages(e);
+        remoteSaveAllDebounced();
+}
 }
 
 	// ======= FORM HANDLERS =======
