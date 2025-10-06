@@ -18,6 +18,10 @@
 					<span>Design Team</span>
 				</div>
 			</div>
+			<div class="actions">
+				<input type="text" id="searchTasks" placeholder="Search tasks or #tags" title="Search by keyword or #tag" />
+				<button id="toggleTheme" class="btn secondary" title="Toggle light/dark">Toggle Theme</button>
+			</div>
 		</header>
 
 		<section class="toolbar card">
@@ -38,6 +42,24 @@
 				<div class="filter">
 					<label for="filterWeek">Week</label>
 					<input type="week" id="filterWeek" />
+				</div>
+				<div class="filter">
+					<label for="filterPriority">Priority</label>
+					<select id="filterPriority">
+						<option value="">All</option>
+						<option value="Low">Low</option>
+						<option value="Medium">Medium</option>
+						<option value="High">High</option>
+					</select>
+				</div>
+				<div class="filter">
+					<label for="filterStatus">Status</label>
+					<select id="filterStatus">
+						<option value="">All</option>
+						<option value="To Do">To Do</option>
+						<option value="In Progress">In Progress</option>
+						<option value="Done">Done</option>
+					</select>
 				</div>
 				<div class="actions">
 					<button id="toggleView" class="btn secondary" data-view="table" title="Switch to cards">Cards View</button>
@@ -68,6 +90,22 @@
 						<label for="task">Task</label>
 						<input type="text" id="task" placeholder="Describe the task..." maxlength="200" required />
 					</div>
+					<div class="field">
+						<label for="priority">Priority</label>
+						<select id="priority">
+							<option value="Low">Low</option>
+							<option value="Medium" selected>Medium</option>
+							<option value="High">High</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="status">Status</label>
+						<select id="status">
+							<option value="To Do">To Do</option>
+							<option value="In Progress" selected>In Progress</option>
+							<option value="Done">Done</option>
+						</select>
+					</div>
 				</div>
 
 				<div class="form-row">
@@ -82,6 +120,10 @@
 					<div class="field">
 						<label for="endTime">End Time</label>
 						<input type="time" id="endTime" step="60" />
+					</div>
+					<div class="field flex-1">
+						<label for="tags">Tags</label>
+						<input type="text" id="tags" placeholder="#ui, #homepage (comma separated)" />
 					</div>
 					<div class="field">
 						<label>&nbsp;</label>
@@ -124,11 +166,15 @@
 					<thead>
 						<tr>
 							<th>Designer</th>
+							<th>Priority</th>
+							<th>Status</th>
 							<th>Date</th>
 							<th>Start</th>
 							<th>End</th>
 							<th>Duration</th>
 							<th>Task</th>
+							<th>Tags</th>
+							<th>Thread</th>
 						</tr>
 					</thead>
 					<tbody id="entriesTbody"></tbody>
@@ -137,6 +183,17 @@
 
 			<div id="cardsView" class="cards-wrapper" hidden>
 				<div id="cardsContainer" class="cards"></div>
+			</div>
+		</section>
+
+		<section class="card" id="threadPanel" hidden>
+			<h2>Task Thread</h2>
+			<div id="threadMeta" class="help"></div>
+			<div id="threadMessages" class="chat-messages" style="height:220px"></div>
+			<div class="chat-input">
+				<input type="text" id="threadInput" placeholder="Comment on this task..." />
+				<button id="threadSendBtn" class="btn">Add Comment</button>
+				<button id="threadCloseBtn" class="btn secondary">Close</button>
 			</div>
 		</section>
 
