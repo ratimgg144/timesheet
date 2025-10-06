@@ -208,6 +208,8 @@ tr[data-designer="Megui"] td:first-child { border-left: 4px solid var(--megui); 
 /* Thread link */
 .thread-link { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .thread-link:hover { color: var(--accent-600); }
+.thread-link.danger { color: #ef4444; }
+.thread-link.danger:hover { color: #dc2626; }
 
 /* Feed */
 .grid-2 { display: grid; grid-template-columns: 1.8fr 1fr; gap: 16px; }
