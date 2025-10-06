@@ -715,6 +715,19 @@ function deleteEntry(id) {
 		});
 		on("downloadExcel", "click", toExcel);
 
+	// Date/Time helpers
+	const fmtDateInput = (d)=> d.toISOString().slice(0,10);
+	const setToday = ()=> { const d=new Date(); if (elExists('manualDate')) $('manualDate').value = fmtDateInput(d); };
+	const setYesterday = ()=> { const d=new Date(); d.setDate(d.getDate()-1); if (elExists('manualDate')) $('manualDate').value = fmtDateInput(d); };
+	const setTime = (id)=>{ const d=new Date(); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); if (elExists(id)) $(id).value=`${hh}:${mm}`; };
+	const addMinutesToEnd = (m)=>{ if (!elExists('endTime')) return; let d=new Date(); if (elExists('startTime') && $('startTime').value){ const [hh,mm]=$('startTime').value.split(':').map(n=>parseInt(n,10)); d.setHours(hh,mm,0,0);} d=new Date(d.getTime()+m*60000); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); $('endTime').value=`${hh}:${mm}`; };
+	if (elExists('dateToday')) on('dateToday','click', setToday);
+	if (elExists('dateYesterday')) on('dateYesterday','click', setYesterday);
+	if (elExists('startNow')) on('startNow','click', ()=> setTime('startTime'));
+	if (elExists('endNow')) on('endNow','click', ()=> setTime('endTime'));
+	if (elExists('endPlus30')) on('endPlus30','click', ()=> addMinutesToEnd(30));
+	if (elExists('endPlus60')) on('endPlus60','click', ()=> addMinutesToEnd(60));
+
 		// Chat
 		on("chatLoginBtn", "click", chatLogin);
 		on("chatLogoutBtn", "click", chatLogout);
