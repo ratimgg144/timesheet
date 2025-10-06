@@ -244,9 +244,10 @@ function applyFilters(data) {
 			for (const tag of (e.tags||[])) { const span = document.createElement("span"); span.className = "tag"; span.textContent = `#${tag}`; tagsTd.appendChild(span); }
 			tagsTd.className = "cell-tags";
 			const threadTd = document.createElement("td");
-			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); threadTd.appendChild(threadLink);
-			const sep = document.createTextNode("  •  "); threadTd.appendChild(sep);
-			const delLink = document.createElement("span"); delLink.className = "thread-link danger"; delLink.textContent = "Delete"; delLink.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEntry(e.id); }); threadTd.appendChild(delLink);
+			const actionsWrap = document.createElement("span"); actionsWrap.className = "thread-actions";
+			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); actionsWrap.appendChild(threadLink);
+			const delLink = document.createElement("span"); delLink.className = "thread-link danger"; delLink.textContent = "Delete"; delLink.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEntry(e.id); }); actionsWrap.appendChild(delLink);
+			threadTd.appendChild(actionsWrap);
             const pEl = badgeForPriority(e.priority || "Medium"); pEl.dataset.role = "priority";
             const sEl = badgeForStatus(e.status || "In Progress"); sEl.dataset.role = "status";
             tr.append(
