@@ -111,6 +111,8 @@ html, body {
 label { color: var(--muted); margin-bottom: 6px; font-size: 12px; }
 
 .help { color: var(--muted); margin-top: 6px; font-size: 12px; }
+.help .pill { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background: var(--bg-soft); margin-right:6px; }
+.help .pill .x { cursor:pointer; color: var(--muted); }
 
 input[type="text"], select, input[type="week"], input[type="date"], input[type="time"], input[type="password"] {
 	background: linear-gradient(180deg, var(--bg-soft), rgba(0,0,0,0.04));
