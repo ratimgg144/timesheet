@@ -339,7 +339,35 @@ function applyFilters(data) {
 		renderSummary(filtered);
 		renderChat();
 		wireInlineEditing();
+		renderActiveFilters();
 	}
+
+function renderActiveFilters(){
+		const box = $("activeFilters"); if (!box) return;
+		const pills = [];
+		const d = safeValue("filterDesigner"); if (d) pills.push({k:'Designer',v:d,clear:()=>{$("filterDesigner").value='';}});
+		const w = safeValue("filterWeek"); if (w) pills.push({k:'Week',v:w,clear:()=>{$("filterWeek").value='';}});
+		const p = safeValue("filterPriority"); if (p) pills.push({k:'Priority',v:p,clear:()=>{$("filterPriority").value='';}});
+		const s = safeValue("filterStatus"); if (s) pills.push({k:'Status',v:s,clear:()=>{$("filterStatus").value='';}});
+		const q = safeValue("searchTasks"); if (q) pills.push({k:'Search',v:q,clear:()=>{$("searchTasks").value='';}});
+		box.innerHTML = pills.map((p,i)=>`<span class="pill" data-i="${i}"><strong>${p.k}:</strong> ${p.v} <span class="x">×</span></span>`).join("");
+		box.querySelectorAll('.pill').forEach((el)=>{
+			el.addEventListener('click', ()=>{ const i = Number(el.getAttribute('data-i')); const item = pills[i]; if(!item) return; item.clear(); triggerRender(); });
+		});
+}
+
+function quickAdd(){
+		const designer = safeValue('qaDesigner');
+		const task = safeValue('qaTask').trim();
+		let priority = 'Medium'; const qap = $("qaPriority"); const sp = qap? qap.querySelector('.chip.selected'):null; if (sp) priority = sp.getAttribute('data-value')||'Medium';
+		let status = 'In Progress'; const qas = $("qaStatus"); const ss = qas? qas.querySelector('.chip.selected'):null; if (ss) status = ss.getAttribute('data-value')||'In Progress';
+		if (!designer || !task) return;
+		const now = Date.now();
+		entries.unshift({ id: cryptoRandomId(), designer, task, comments: '', mentions: [], priority, status, tags: [], thread: [], startMs: now, endMs: now });
+		if ($("qaTask")) $("qaTask").value = '';
+		remoteSaveAllDebounced();
+		triggerRender();
+}
 
 // Inline editing for table: edit task text; click badges to cycle; click tags cell to edit
 function wireInlineEditing() {
@@ -651,6 +679,12 @@ function deleteEntry(id) {
 		// chip interactions
 		const pc = $("priorityChips"); if (pc) pc.addEventListener('click', (e) => { const t = e.target.closest('.chip'); if (!t) return; for (const el of pc.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
 		const sc = $("statusChips"); if (sc) sc.addEventListener('click', (e) => { const t = e.target.closest('.chip'); if (!t) return; for (const el of sc.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
+
+		// Quick Add
+		const qap = $("qaPriority"); if (qap) qap.addEventListener('click', (e)=>{ const t=e.target.closest('.chip'); if(!t) return; for (const el of qap.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
+		const qas = $("qaStatus"); if (qas) qas.addEventListener('click', (e)=>{ const t=e.target.closest('.chip'); if(!t) return; for (const el of qas.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
+		const qaTask = $("qaTask"); if (qaTask) qaTask.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); quickAdd(); }});
+		if (elExists("qaAdd")) on("qaAdd","click", quickAdd);
 
 		on("filterDesigner", "change", triggerRender);
 		on("filterWeek", "change", triggerRender);
