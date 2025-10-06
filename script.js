@@ -112,6 +112,10 @@
 				task: String(x.task || ""),
 				comments: String(x.comments || ""),
 				mentions: Array.isArray(x.mentions) ? x.mentions : [],
+				priority: ["Low","Medium","High"].includes(x.priority) ? x.priority : "Medium",
+				status: ["To Do","In Progress","Done"].includes(x.status) ? x.status : "In Progress",
+				tags: Array.isArray(x.tags) ? x.tags.map(String) : [],
+				thread: Array.isArray(x.thread) ? x.thread.map(m => ({ id: String(m.id), designer: String(m.designer||""), text: String(m.text||""), ts: isFinite(m.ts)?Number(m.ts):Date.now() })) : [],
 				startMs: isFinite(x.startMs) ? Number(x.startMs) : null,
 				endMs: isFinite(x.endMs) ? Number(x.endMs) : null
 			})).filter(e => e.designer && e.task && (e.startMs || e.endMs));
@@ -185,22 +189,31 @@
 	function eEnd(e) { return e.endMs ?? e.startMs ?? 0; }
 
 	// ======= FILTERS/RENDER BASIC =======
-	function applyFilters(data) {
+function applyFilters(data) {
 		const designer = safeValue("filterDesigner");
 		const weekValue = safeValue("filterWeek");
-		const q = ""; // no search box in your current HTML set
+		const priority = safeValue("filterPriority");
+		const status = safeValue("filterStatus");
+		const q = safeValue("searchTasks").toLowerCase();
 
 		let filtered = data;
 		if (designer) filtered = filtered.filter(e => e.designer === designer);
+		if (priority) filtered = filtered.filter(e => e.priority === priority);
+		if (status) filtered = filtered.filter(e => e.status === status);
 
 		const range = getWeekRangeFromInput(weekValue);
 		if (range) filtered = filtered.filter(e => { const s = eStart(e); return s >= range.startMs && s <= range.endMs; });
 
-		if (q) filtered = filtered.filter(e => (`${e.designer} ${e.task} ${e.comments || ""}`).toLowerCase().includes(q));
+		if (q) {
+			filtered = filtered.filter(e => {
+				const hay = `${e.designer} ${e.task} ${e.comments || ""} ${(e.tags||[]).map(t=>`#${t}`).join(" ")}`.toLowerCase();
+				return hay.includes(q);
+			});
+		}
 
 		filtered.sort((a, b) => eStart(b) - eStart(a));
 		return filtered;
-	}
+}
 
 	function renderTable(data) {
 		if (!elExists("entriesTbody") || !elExists("entryCount")) return;
@@ -210,14 +223,22 @@
 			const tr = document.createElement("tr"); tr.setAttribute("data-designer", e.designer);
 			const start = eStart(e), end = eEnd(e), duration = isFinite(end - start) ? end - start : 0;
 
-			const c = (t)=>{ const td=document.createElement("td"); td.textContent=t; return td; };
+			const c = (t)=>{ const td=document.createElement("td"); if (t instanceof Node) td.appendChild(t); else td.textContent=t; return td; };
+			const tagsTd = document.createElement("td");
+			for (const tag of (e.tags||[])) { const span = document.createElement("span"); span.className = "tag"; span.textContent = `#${tag}`; tagsTd.appendChild(span); }
+			const threadTd = document.createElement("td");
+			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); threadTd.appendChild(threadLink);
 			tr.append(
 				c(e.designer),
+				c(badgeForPriority(e.priority || "Medium")),
+				c(badgeForStatus(e.status || "In Progress")),
 				c(formatDate(start || end)),
 				c(start ? formatTime(start) : "—"),
 				c(end ? formatTime(end) : "—"),
 				c(formatDuration(duration)),
-				c(e.task)
+				c(e.task),
+				tagsTd,
+				threadTd
 			);
 			tbody.appendChild(tr);
 		}
@@ -247,8 +268,11 @@
 
 			const title = document.createElement("div"); title.style.fontWeight = "700"; title.textContent = e.task;
 			const meta = document.createElement("div"); meta.className = "meta"; meta.innerHTML = `<span>${e.designer}</span><span>${formatDate(start || end)}</span>`;
+			const badges = document.createElement("div"); badges.className = "meta"; badges.append(badgeForPriority(e.priority||"Medium"), badgeForStatus(e.status||"In Progress"));
+			const tagsWrap = document.createElement("div"); for (const tag of (e.tags||[])) { const span = document.createElement("span"); span.className = "tag"; span.textContent = `#${tag}`; tagsWrap.appendChild(span); }
 			const times = document.createElement("div"); times.className = "meta"; times.innerHTML = `<span>${start ? formatTime(start) : "—"} → ${end ? formatTime(end) : "—"}</span><span>${formatDuration(duration)}</span>`;
-			card.append(title, meta, times);
+			const threadLink = document.createElement("div"); threadLink.className = "thread-link"; threadLink.textContent = `Open Thread (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id));
+			card.append(title, meta, badges, tagsWrap, times, threadLink);
 			container.appendChild(card);
 		}
 	}
@@ -303,9 +327,12 @@
 		if (!elExists("entryForm")) return;
 		$("designer").value = "";
 		$("task").value = "";
+		if (elExists("priority")) $("priority").value = "Medium";
+		if (elExists("status")) $("status").value = "In Progress";
 		$("manualDate").value = "";
 		$("startTime").value = "";
 		$("endTime").value = "";
+		if (elExists("tags")) $("tags").value = "";
 	}
 	function onSubmit(ev) {
 		ev.preventDefault();
@@ -335,7 +362,7 @@
 		const designer = safeValue("timerDesigner");
 		const task = safeValue("timerTask").trim();
 		if (!designer || !task) return;
-		activeTimer = { id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs: Date.now() };
+		activeTimer = { id: cryptoRandomId(), designer, task, comments: "", mentions: [], priority: "Medium", status: "In Progress", tags: [], thread: [], startMs: Date.now() };
 		remoteSaveAllNow();
 		updateTimerButtons();
 		runTimerTick();
@@ -470,18 +497,21 @@
 			const start = eStart(e), end = eEnd(e);
 			return {
 				Designer: e.designer,
+				Priority: e.priority || "Medium",
+				Status: e.status || "In Progress",
 				Date: new Date(start || end).toISOString().slice(0, 10),
 				Start: start ? new Date(start).toLocaleTimeString() : "",
 				End: end ? new Date(end).toLocaleTimeString() : "",
 				Duration: formatDuration((end || 0) - (start || 0)),
-				Task: e.task
+				Task: e.task,
+				Tags: (e.tags||[]).map(t=>`#${t}`).join(" ")
 			};
 		});
 		const ok = await ensureSheetJSLoaded();
 		if (ok && window.XLSX) {
 			try {
 				const ws = XLSX.utils.json_to_sheet(rows);
-				ws["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 50 }];
+				ws["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 50 }];
 				const wb = XLSX.utils.book_new();
 				XLSX.utils.book_append_sheet(wb, ws, "Timesheet");
 				const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
@@ -529,12 +559,21 @@
 		// Timer
 		on("startTimer", "click", startTimer);
 		on("stopTimer", "click", stopTimer);
+
+		// Threads
+		on("threadSendBtn", "click", addThreadComment);
+		on("threadCloseBtn", "click", closeThread);
+
+		// Theme
+		on("toggleTheme", "click", toggleTheme);
 	}
 
 	// ======= INIT =======
 	async function init() {
 		await remoteLoadAll();
 		initEvents();
+		// Theme
+		(function(){ let t = "dark"; try { t = localStorage.getItem("timesheet_theme") || "dark"; } catch {} if (t === "light") document.documentElement.setAttribute("data-theme","light"); })();
 		updateTimerButtons();
 		if (activeTimer) { runTimerTick(); timerInterval = setInterval(runTimerTick, 1000); }
 		triggerRender();
