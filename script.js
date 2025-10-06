@@ -380,6 +380,7 @@ function wireInlineEditing() {
 				});
 			}
 		}
+}
 
 // ======= THREADS PER TASK =======
 let openThreadTaskId = null;
@@ -416,7 +417,6 @@ function addThreadComment() {
         if (elExists("threadInput")) $("threadInput").value = "";
         renderThreadMessages(e);
         remoteSaveAllDebounced();
-}
 }
 
 	// ======= FORM HANDLERS =======
@@ -638,6 +638,9 @@ function addThreadComment() {
 
 		on("filterDesigner", "change", triggerRender);
 		on("filterWeek", "change", triggerRender);
+	if (elExists("filterPriority")) on("filterPriority", "change", triggerRender);
+	if (elExists("filterStatus")) on("filterStatus", "change", triggerRender);
+	const searchEl = $("searchTasks"); if (searchEl) searchEl.addEventListener("input", triggerRender);
 
 		on("toggleView", "click", () => {
 			const btn = $("toggleView");
@@ -678,8 +681,16 @@ function addThreadComment() {
 		on("threadCloseBtn", "click", closeThread);
 
 		// Theme
-		on("toggleTheme", "click", toggleTheme);
+	on("toggleTheme", "click", toggleTheme);
 	}
+
+// ======= THEME =======
+function toggleTheme() {
+	const root = document.documentElement;
+	const isLight = root.getAttribute("data-theme") === "light";
+	if (isLight) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", "light");
+	try { localStorage.setItem("timesheet_theme", isLight ? "dark" : "light"); } catch {}
+}
 
 // ======= INIT =======
 	async function init() {
