@@ -220,23 +220,24 @@ function applyFilters(data) {
 		const tbody = $("entriesTbody"), countEl = $("entryCount");
 		tbody.innerHTML = "";
 		for (const e of data) {
-			const tr = document.createElement("tr"); tr.setAttribute("data-designer", e.designer);
+			const tr = document.createElement("tr"); tr.setAttribute("data-designer", e.designer); tr.setAttribute("data-id", e.id);
 			const start = eStart(e), end = eEnd(e), duration = isFinite(end - start) ? end - start : 0;
 
-			const c = (t)=>{ const td=document.createElement("td"); if (t instanceof Node) td.appendChild(t); else td.textContent=t; return td; };
+			const c = (t, cls)=>{ const td=document.createElement("td"); if (cls) td.className = cls; if (t instanceof Node) td.appendChild(t); else td.textContent=t; return td; };
 			const tagsTd = document.createElement("td");
 			for (const tag of (e.tags||[])) { const span = document.createElement("span"); span.className = "tag"; span.textContent = `#${tag}`; tagsTd.appendChild(span); }
+			tagsTd.className = "cell-tags";
 			const threadTd = document.createElement("td");
 			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); threadTd.appendChild(threadLink);
 			tr.append(
 				c(e.designer),
-				c(badgeForPriority(e.priority || "Medium")),
-				c(badgeForStatus(e.status || "In Progress")),
+				c(Object.assign(badgeForPriority(e.priority || "Medium"), { dataset: { role: "priority" } })),
+				c(Object.assign(badgeForStatus(e.status || "In Progress"), { dataset: { role: "status" } })),
 				c(formatDate(start || end)),
 				c(start ? formatTime(start) : "—"),
 				c(end ? formatTime(end) : "—"),
 				c(formatDuration(duration)),
-				c(e.task),
+				c(e.task, "cell-task"),
 				tagsTd,
 				threadTd
 			);
@@ -314,7 +315,55 @@ function applyFilters(data) {
 		renderCards(filtered);
 		renderSummary(filtered);
 		renderChat();
+		wireInlineEditing();
 	}
+
+// Inline editing for table: edit task text; click badges to cycle; click tags cell to edit
+function wireInlineEditing() {
+		const tbody = $("entriesTbody"); if (!tbody) return;
+		for (const tr of tbody.querySelectorAll("tr")) {
+			const id = tr.getAttribute("data-id");
+			const entry = entries.find(e => e.id === id); if (!entry) continue;
+			// Task cell inline edit on double click
+			const taskCell = tr.querySelector(".cell-task");
+			if (taskCell && !taskCell.dataset.bound) {
+				taskCell.dataset.bound = "1";
+				taskCell.addEventListener("dblclick", () => {
+					const current = entry.task;
+					const input = document.createElement("input"); input.type = "text"; input.value = current; input.style.width = "100%";
+					taskCell.innerHTML = ""; taskCell.appendChild(input); input.focus();
+					const commit = () => { entry.task = input.value.trim() || current; triggerRender(); remoteSaveAllDebounced(); };
+					input.addEventListener("blur", commit);
+					input.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") triggerRender(); });
+				});
+			}
+			// Priority/status badge click to cycle
+			const cycle = (list, value) => list[(list.indexOf(value)+1)%list.length];
+			const pBadge = tr.querySelector('[data-role="priority"]');
+			if (pBadge && !pBadge.dataset.bound) {
+				pBadge.dataset.bound = "1";
+				pBadge.addEventListener("click", () => { entry.priority = cycle(["Low","Medium","High"], entry.priority||"Medium"); triggerRender(); remoteSaveAllDebounced(); });
+			}
+			const sBadge = tr.querySelector('[data-role="status"]');
+			if (sBadge && !sBadge.dataset.bound) {
+				sBadge.dataset.bound = "1";
+				sBadge.addEventListener("click", () => { entry.status = cycle(["To Do","In Progress","Done"], entry.status||"In Progress"); triggerRender(); remoteSaveAllDebounced(); });
+			}
+			// Tags edit on double click
+			const tagsCell = tr.querySelector('.cell-tags');
+			if (tagsCell && !tagsCell.dataset.bound) {
+				tagsCell.dataset.bound = "1";
+				tagsCell.addEventListener("dblclick", () => {
+					const current = (entry.tags||[]).join(", ");
+					const input = document.createElement("input"); input.type = "text"; input.value = current; input.style.width = "100%";
+					tagsCell.innerHTML = ""; tagsCell.appendChild(input); input.focus();
+					const commit = () => { entry.tags = input.value.split(',').map(s=>s.trim().replace(/^#/,'')).filter(Boolean); triggerRender(); remoteSaveAllDebounced(); };
+					input.addEventListener("blur", commit);
+					input.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") triggerRender(); });
+				});
+			}
+		}
+}
 
 	// ======= FORM HANDLERS =======
 	function parseManualDateTime(dateStr, timeStr) {
@@ -327,8 +376,9 @@ function applyFilters(data) {
 		if (!elExists("entryForm")) return;
 		$("designer").value = "";
 		$("task").value = "";
-		if (elExists("priority")) $("priority").value = "Medium";
-		if (elExists("status")) $("status").value = "In Progress";
+		// reset chips
+		const pc = $("priorityChips"); if (pc) { for (const el of pc.querySelectorAll('.chip')) el.classList.remove('selected'); const low = pc.querySelector('[data-value="Low"]'); if (low) low.classList.add('selected'); }
+		const sc = $("statusChips"); if (sc) { for (const el of sc.querySelectorAll('.chip')) el.classList.remove('selected'); const ip = sc.querySelector('[data-value="In Progress"]'); if (ip) ip.classList.add('selected'); }
 		$("manualDate").value = "";
 		$("startTime").value = "";
 		$("endTime").value = "";
@@ -338,6 +388,9 @@ function applyFilters(data) {
 		ev.preventDefault();
 		const designer = safeValue("designer");
 		const task = safeValue("task").trim();
+		// read chips
+		let priority = "Medium"; const pc = $("priorityChips"); const selP = pc ? pc.querySelector('.chip.selected') : null; if (selP) priority = selP.getAttribute('data-value') || "Medium";
+		let status = "In Progress"; const sc = $("statusChips"); const selS = sc ? sc.querySelector('.chip.selected') : null; if (selS) status = selS.getAttribute('data-value') || "In Progress";
 		const dateStr = safeValue("manualDate");
 		const startStr = safeValue("startTime");
 		const endStr = safeValue("endTime");
@@ -351,7 +404,7 @@ function applyFilters(data) {
 		else if (!startMs && endMs) startMs = endMs;
 		if (endMs < startMs) { const t = startMs; startMs = endMs; endMs = t; }
 
-		entries.push({ id: cryptoRandomId(), designer, task, comments: "", mentions: [], startMs, endMs });
+		entries.push({ id: cryptoRandomId(), designer, task, comments: "", mentions: [], priority, status, tags: (safeValue('tags')||'').split(',').map(s=>s.trim().replace(/^#/,'')).filter(Boolean), thread: [], startMs, endMs });
 		remoteSaveAllNow();
 		resetForm();
 		triggerRender();
@@ -525,6 +578,9 @@ function applyFilters(data) {
 	// ======= UI EVENTS =======
 	function initEvents() {
 		on("entryForm", "submit", onSubmit);
+		// chip interactions
+		const pc = $("priorityChips"); if (pc) pc.addEventListener('click', (e) => { const t = e.target.closest('.chip'); if (!t) return; for (const el of pc.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
+		const sc = $("statusChips"); if (sc) sc.addEventListener('click', (e) => { const t = e.target.closest('.chip'); if (!t) return; for (const el of sc.querySelectorAll('.chip')) el.classList.remove('selected'); t.classList.add('selected'); });
 
 		on("filterDesigner", "change", triggerRender);
 		on("filterWeek", "change", triggerRender);
@@ -545,6 +601,9 @@ function applyFilters(data) {
 		on("clearFilters", "click", () => {
 			if (elExists("filterDesigner")) $("filterDesigner").value = "";
 			if (elExists("filterWeek")) $("filterWeek").value = "";
+			if (elExists("filterPriority")) $("filterPriority").value = "";
+			if (elExists("filterStatus")) $("filterStatus").value = "";
+			if (elExists("searchTasks")) $("searchTasks").value = "";
 			triggerRender();
 		});
 		on("downloadExcel", "click", toExcel);
@@ -568,7 +627,7 @@ function applyFilters(data) {
 		on("toggleTheme", "click", toggleTheme);
 	}
 
-	// ======= INIT =======
+// ======= INIT =======
 	async function init() {
 		await remoteLoadAll();
 		initEvents();
