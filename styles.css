@@ -123,6 +123,13 @@ input[type="text"], select, input[type="week"], input[type="date"], input[type="
 	outline: none;
 	transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.05s ease;
 }
+/* Ensure native select dropdown list is readable */
+select option, select optgroup {
+	background: var(--bg-soft);
+	color: var(--text);
+}
+/* Some browsers use a different element for the popup; color-scheme hints help */
+select { color-scheme: dark light; }
 input[type="text"]:focus, select:focus, input[type="week"]:focus, input[type="date"]:focus, input[type="time"]:focus, input[type="password"]:focus {
 	border-color: #2b7eb0;
 	box-shadow: 0 0 0 3px rgba(86,166,213,0.25);
