@@ -245,6 +245,7 @@ function applyFilters(data) {
 			tagsTd.className = "cell-tags";
 			const threadTd = document.createElement("td");
 			const threadLink = document.createElement("span"); threadLink.className = "thread-link"; threadLink.textContent = `Open (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id)); threadTd.appendChild(threadLink);
+			const delBtn = document.createElement("button"); delBtn.className = "action-mini danger"; delBtn.textContent = "Delete"; delBtn.style.marginLeft = "8px"; delBtn.addEventListener("click", (ev) => { ev.stopPropagation(); deleteEntry(e.id); }); threadTd.appendChild(delBtn);
             const pEl = badgeForPriority(e.priority || "Medium"); pEl.dataset.role = "priority";
             const sEl = badgeForStatus(e.status || "In Progress"); sEl.dataset.role = "status";
             tr.append(
@@ -291,7 +292,9 @@ function applyFilters(data) {
 			const tagsWrap = document.createElement("div"); for (const tag of (e.tags||[])) { const span = document.createElement("span"); span.className = "tag"; span.textContent = `#${tag}`; tagsWrap.appendChild(span); }
 			const times = document.createElement("div"); times.className = "meta"; times.innerHTML = `<span>${start ? formatTime(start) : "—"} → ${end ? formatTime(end) : "—"}</span><span>${formatDuration(duration)}</span>`;
 			const threadLink = document.createElement("div"); threadLink.className = "thread-link"; threadLink.textContent = `Open Thread (${(e.thread||[]).length})`; threadLink.addEventListener("click", ()=> openThread(e.id));
-			card.append(title, meta, badges, tagsWrap, times, threadLink);
+			const delBtn = document.createElement("button"); delBtn.className = "action-mini danger"; delBtn.textContent = "Delete"; delBtn.addEventListener("click", (ev)=>{ ev.stopPropagation(); deleteEntry(e.id); });
+			const actions = document.createElement("div"); actions.className = "action-btns"; actions.append(threadLink, delBtn);
+			card.append(title, meta, badges, tagsWrap, times, actions);
 			container.appendChild(card);
 		}
 	}
@@ -418,6 +421,16 @@ function addThreadComment() {
         if (elExists("threadInput")) $("threadInput").value = "";
         renderThreadMessages(e);
         remoteSaveAllDebounced();
+}
+
+// ======= DELETE ENTRY =======
+function deleteEntry(id) {
+	const idx = entries.findIndex(e => e.id === id);
+	if (idx === -1) return;
+	if (!confirm("Delete this entry? This cannot be undone.")) return;
+	entries.splice(idx, 1);
+	remoteSaveAllDebounced();
+	triggerRender();
 }
 
 	// ======= FORM HANDLERS =======
