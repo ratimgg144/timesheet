@@ -101,7 +101,8 @@
 	async function remoteLoadAll() {
 		try {
 			const data = await withRetry(() => jsonbinGetLatest());
-			const safe = data && typeof data === "object" ? data : {};
+			const root = (data && typeof data === "object" && data.record && typeof data.record === "object") ? data.record : data;
+			const safe = root && typeof root === "object" ? root : {};
 			const loadedEntries = Array.isArray(safe.entries) ? safe.entries : [];
 			const loadedTimer = safe.activeTimer && typeof safe.activeTimer === "object" ? safe.activeTimer : null;
 			const loadedChat = Array.isArray(safe.chatMessages) ? safe.chatMessages : [];
@@ -679,6 +680,7 @@ function addThreadComment() {
 		// Threads
 		on("threadSendBtn", "click", addThreadComment);
 		on("threadCloseBtn", "click", closeThread);
+		// open thread when clicking any row's Thread link handled in render
 
 		// Theme
 	on("toggleTheme", "click", toggleTheme);
