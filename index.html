@@ -26,34 +26,6 @@
 
 		<section class="toolbar card">
 			<div class="filters">
-				<div class="filter flex-1">
-					<label>Quick Add</label>
-					<div class="form-row">
-						<select id="qaDesigner">
-							<option value="" disabled selected>Designer</option>
-							<option value="Rati">Rati</option>
-							<option value="Steven">Steven</option>
-							<option value="Cristian">Cristian</option>
-							<option value="Santiago">Santiago</option>
-							<option value="Andrea">Andrea</option>
-							<option value="Valentina">Valentina</option>
-							<option value="Megui">Megui</option>
-						</select>
-						<input type="text" id="qaTask" class="flex-1" placeholder="Task… (enter to add)" />
-						<div id="qaPriority" class="chip-group" role="group" aria-label="Priority">
-							<div class="chip selected" data-value="Medium">Med</div>
-							<div class="chip" data-value="High">High</div>
-							<div class="chip" data-value="Low">Low</div>
-						</div>
-						<div id="qaStatus" class="chip-group" role="group" aria-label="Status">
-							<div class="chip selected" data-value="In Progress">In Progress</div>
-							<div class="chip" data-value="To Do">To Do</div>
-							<div class="chip" data-value="Done">Done</div>
-						</div>
-						<button id="qaAdd" class="btn">Add</button>
-					</div>
-					<p class="help">Use Enter in task field to add quickly. Times default to now.</p>
-				</div>
 				<div class="filter">
 					<label for="filterDesigner">Designer</label>
 					<select id="filterDesigner">
@@ -141,14 +113,17 @@
 					<div class="field">
 						<label for="manualDate">Date</label>
 						<input type="date" id="manualDate" />
+						<div class="help"><button type="button" class="btn secondary" id="dateToday">Today</button> <button type="button" class="btn secondary" id="dateYesterday">Yesterday</button></div>
 					</div>
 					<div class="field">
 						<label for="startTime">Start Time</label>
 						<input type="time" id="startTime" step="60" />
+						<div class="help"><button type="button" class="btn secondary" id="startNow">Now</button></div>
 					</div>
 					<div class="field">
 						<label for="endTime">End Time</label>
 						<input type="time" id="endTime" step="60" />
+						<div class="help"><button type="button" class="btn secondary" id="endNow">Now</button> <button type="button" class="btn secondary" id="endPlus30">+30m</button> <button type="button" class="btn secondary" id="endPlus60">+1h</button></div>
 					</div>
 					<div class="field flex-1">
 						<label for="tags">Tags</label>
