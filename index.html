@@ -91,20 +91,20 @@
 						<input type="text" id="task" placeholder="Describe the task..." maxlength="200" required />
 					</div>
 					<div class="field">
-						<label for="priority">Priority</label>
-						<select id="priority">
-							<option value="Low">Low</option>
-							<option value="Medium" selected>Medium</option>
-							<option value="High">High</option>
-						</select>
+						<label>Priority</label>
+						<div id="priorityChips" class="chip-group" role="group" aria-label="Priority">
+							<div class="chip selected" data-value="Low">Low</div>
+							<div class="chip" data-value="Medium">Medium</div>
+							<div class="chip" data-value="High">High</div>
+						</div>
 					</div>
 					<div class="field">
-						<label for="status">Status</label>
-						<select id="status">
-							<option value="To Do">To Do</option>
-							<option value="In Progress" selected>In Progress</option>
-							<option value="Done">Done</option>
-						</select>
+						<label>Status</label>
+						<div id="statusChips" class="chip-group" role="group" aria-label="Status">
+							<div class="chip" data-value="To Do">To Do</div>
+							<div class="chip selected" data-value="In Progress">In Progress</div>
+							<div class="chip" data-value="Done">Done</div>
+						</div>
 					</div>
 				</div>
 
